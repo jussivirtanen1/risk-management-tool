@@ -16,7 +16,7 @@ class PostgresConnector:
         
         # Default configuration from environment variables
         self.config = {
-            "dbname": os.getenv("DB_NAME", "am_db"),
+            "dbname": os.getenv("DB_NAME", "am_db_test"),
             "user": os.getenv("DB_USER", "docker_app"),
             "password": os.getenv("DB_PASSWORD"),
             "host": os.getenv("DB_HOST", "localhost"),
