@@ -2,8 +2,10 @@ version: '3.8'
 
 services:
   app:
-    build: .
-    image: asset-management:2.0.0-dev  # Add this line for versioning
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${IMAGE_NAME:-my-app}:${TAG:-latest}${ENV:-}
     env_file:
       - .env.${ENVIRONMENT:-dev}
     environment:
