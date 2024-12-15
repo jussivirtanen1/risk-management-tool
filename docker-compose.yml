@@ -12,6 +12,7 @@ services:
       - DB_HOST=host.docker.internal
     volumes:
       - .:/app
+      - ~/Desktop/plots:/app/plots
     networks:
       - app-network
     extra_hosts:  # Add this section for macOS
