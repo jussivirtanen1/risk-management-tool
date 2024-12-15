@@ -15,7 +15,7 @@ def process_stock(symbol: str, periods: List[int], save_path: str) -> None:
         
         if data is not None and not data.empty:
             plotter = MovingAveragePlotter(data, symbol)
-            plot_path = plotter.plot(periods, save_path)
+            plot_path = plotter.plot(periods, save_path="/app/stock_plots")
             
             if plot_path:
                 logger.info(f"Plot saved successfully for {symbol} at: {plot_path}")
