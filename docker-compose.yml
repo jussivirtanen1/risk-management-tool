@@ -3,14 +3,17 @@ version: '3.8'
 services:
   app:
     build: .
+    image: asset-management:2.0.0-dev  # Add this line for versioning
     env_file:
-      - .env.${ENVIRONMENT:-dev}  # Default to development if not specified
+      - .env.${ENVIRONMENT:-dev}
     environment:
       - DB_HOST=host.docker.internal
     volumes:
       - .:/app
     networks:
       - app-network
+    extra_hosts:  # Add this section for macOS
+      - "host.docker.internal:host-gateway"
 
 networks:
   app-network:
