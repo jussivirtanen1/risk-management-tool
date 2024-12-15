@@ -29,7 +29,7 @@ def process_stock(symbol: str, periods: List[int], save_path: str) -> None:
 def main():
     # Get desktop path
     desktop = os.path.join(os.path.expanduser("~"), "Desktop")
-    output_dir = os.path.join(desktop, "stock_plots")
+    output_dir = os.path.join(desktop, "plots")
     
     # List of stock symbols to analyze
     stocks = [
@@ -49,7 +49,7 @@ def main():
     for symbol in stocks:
         process_stock(symbol, periods, output_dir)
     
-    logger.info("Analysis complete. Check the stock_plots directory for PDF files.")
+    logger.info("Analysis complete. Check the plots directory for PDF files.")
 
 if __name__ == "__main__":
     main()
