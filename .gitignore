@@ -3,7 +3,10 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 .coverage
-.env
+# Ignore all .env files
+.env*
+# But keep the example
+!.env.example
 venv/
 plots/
 .DS_Store

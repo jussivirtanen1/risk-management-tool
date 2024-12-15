@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    env_file:
+      - .env.${ENVIRONMENT:-dev}  # Default to development if not specified
+    environment:
+      - DB_HOST=host.docker.internal
+    volumes:
+      - .:/app
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
