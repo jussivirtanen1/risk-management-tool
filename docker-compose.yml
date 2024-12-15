@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ${IMAGE_NAME:-my-app}:${TAG:-latest}${ENV:-}
+    image: ${IMAGE_NAME:-asset-management}:${TAG:-latest}${ENV:-}
     env_file:
       - .env.${ENVIRONMENT:-dev}
     environment:
