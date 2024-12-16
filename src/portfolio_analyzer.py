@@ -178,7 +178,11 @@ class PortfolioAnalyzer:
         """
         print("[CALCULATE_PORTFOLIO_PROPORTIONS] Calculating portfolio proportions...")
         # Initialize aligned_prices with the same columns as positions
+        print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Positions DataFrame before alignment:\n{positions}")
+        print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Creating aligned_prices DataFrame...")
         aligned_prices = pd.DataFrame(index=positions.index, columns=positions.columns).fillna(0)
+        print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Aligned_prices DataFrame after creation:\n{aligned_prices}")
+
         print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Aligned_prices initialized with shape: {aligned_prices.shape}")
 
         for date_idx in positions.index:
