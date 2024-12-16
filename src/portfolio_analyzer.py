@@ -85,6 +85,7 @@ class PortfolioAnalyzer:
         self.price_data = yf.download(tickers, start=self.start_date)['Close']
         self.price_data = self.price_data.fillna(method='ffill')
 
+
     def calculate_monthly_positions(self) -> Tuple[List[date], pd.DataFrame]:
         """
         Calculate monthly positions considering transaction timing.
@@ -98,25 +99,25 @@ class PortfolioAnalyzer:
         price_data_dates = pd.to_datetime(self.price_data.index)
         self.transactions_df['date'] = pd.to_datetime(self.transactions_df['date'])
         
-        monthly_last_dates = self.price_data.groupby(pd.Grouper(freq='M')).last()
+        monthly_last_dates = self.price_data.groupby(pd.Grouper(freq='ME')).last()
         valid_dates = monthly_last_dates[~monthly_last_dates.isnull().any(axis=1)].index
         
         positions_list = []
         final_dates = []
         
         for monthly_date in valid_dates:
-            month_end = monthly_date.date()
+            # Keep monthly_date as pandas Timestamp instead of converting to date
             valid_transactions = self.transactions_df[
-                self.transactions_df['date'] <= month_end
+                self.transactions_df['date'] <= monthly_date
             ]
             
             if not valid_transactions.empty:
                 positions = valid_transactions.groupby('name')['quantity'].sum()
                 
                 if (positions != 0).any():
-                    positions.name = month_end
+                    positions.name = monthly_date.date()  # Convert to date only when storing
                     positions_list.append(positions)
-                    final_dates.append(month_end)
+                    final_dates.append(monthly_date.date())
         
         return final_dates, pd.DataFrame(positions_list, index=final_dates)
 
