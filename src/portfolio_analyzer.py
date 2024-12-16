@@ -143,6 +143,7 @@ class PortfolioAnalyzer:
         
         print(f"Positions DataFrame shape: {positions_df.shape}")
         print(f"Positions DataFrame head:\n{positions_df.head()}")
+        print(f"Positions DataFrame index:\n{positions_df.index}")
         
         return list(positions_df.index), positions_df
 
@@ -257,7 +258,7 @@ class PortfolioAnalyzer:
             print(f"Error during portfolio analysis: {e}")
             return None
 
-def main(owner_id: int = 1, start_date: str = "2020-01-01") -> Optional[pd.DataFrame]:
+def main(owner_id: int = 10, start_date: str = "2020-01-01") -> Optional[pd.DataFrame]:
     """
     Main function to run portfolio analysis.
     
