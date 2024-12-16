@@ -316,7 +316,7 @@ class PortfolioAnalyzer:
                 else:
                     # Round to two decimal places
                     numeric_value = round(float(value), 2)
-                    print(f"[EXPORT_TO_ODS INFO] Writing value {numeric_value} for date {date_str}.")
+                    # print(f"[EXPORT_TO_ODS INFO] Writing value {numeric_value} for date {date_str}.")
                 
                 # Create a cell with numerical value
                 cell = TableCell(valuetype="float", value=str(numeric_value))
