@@ -271,7 +271,8 @@ class PortfolioAnalyzer:
         print("[EXPORT_TO_ODS] Exporting DataFrame to .ods file...")
         from odf.opendocument import OpenDocumentSpreadsheet
         from odf.table import Table, TableRow, TableCell
-        from odf.text import P, Number
+        from odf.text import P
+        from odf.number import Number
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"portfolio_proportions_{timestamp}.ods"
