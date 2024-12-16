@@ -98,7 +98,7 @@ class PortfolioAnalyzer:
             if self.price_data.empty:
                 raise ValueError("No price data returned from Yahoo Finance")
                 
-            self.price_data = self.price_data.fillna(method='ffill')
+            self.price_data = self.price_data.ffill()  # Forward fill missing values
             print(f"[FETCH_MARKET_DATA] Price data fetched with shape: {self.price_data.shape}")
             print(f"[FETCH_MARKET_DATA] Price data date range: {self.price_data.index.min()} to {self.price_data.index.max()}")
             print(f"[FETCH_MARKET_DATA] Price data head:\n{self.price_data.head()}")

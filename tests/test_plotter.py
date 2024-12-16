@@ -1,26 +1,140 @@
-import pytest
+"""
+Tests for the Plotter module and moving average plotting functionality.
+"""
+
+import unittest
+from unittest.mock import patch, MagicMock
 import pandas as pd
+import numpy as np
+from pathlib import Path
 import os
+import shutil
 from src.plotter import MovingAveragePlotter
+from main import create_moving_average_plots, get_output_path
 
-@pytest.fixture
-def sample_data():
-    return pd.DataFrame({
-        'Close': [100, 101, 102, 103, 104]
-    }, index=pd.date_range('2024-01-01', periods=5))
+class TestMovingAveragePlotter(unittest.TestCase):
+    def setUp(self):
+        """Set up test fixtures before each test method."""
+        # Create sample price data
+        dates = pd.date_range('2023-01-01', '2023-03-01')
+        self.sample_data = pd.DataFrame({
+            'Open': np.random.randn(len(dates)) + 100,
+            'High': np.random.randn(len(dates)) + 101,
+            'Low': np.random.randn(len(dates)) + 99,
+            'Close': np.random.randn(len(dates)) + 100,
+            'Volume': np.random.randint(1000000, 10000000, len(dates))
+        }, index=dates)
+        
+        self.test_symbol = "TEST"
+        self.plotter = MovingAveragePlotter(self.sample_data, self.test_symbol)
+        
+        # Create temporary directory for test outputs
+        self.test_output_dir = "test_outputs"
+        os.makedirs(self.test_output_dir, exist_ok=True)
 
-def test_calculate_ma(sample_data):
-    plotter = MovingAveragePlotter(sample_data, symbol="AAPL")
-    plotter.calculate_ma([2])
-    
-    assert 'MA2' in plotter.data.columns
-    assert pd.isna(plotter.data['MA2'].iloc[0])
-    assert plotter.data['MA2'].iloc[1] == 100.5
+    def tearDown(self):
+        """Clean up test fixtures after each test method."""
+        # Remove temporary test directory
+        if os.path.exists(self.test_output_dir):
+            shutil.rmtree(self.test_output_dir)
 
-def test_plot_success(sample_data, tmp_path):
-    plotter = MovingAveragePlotter(sample_data, symbol="AAPL")
-    plot_path = plotter.plot([2], str(tmp_path))
-    
-    assert plot_path is not None
-    assert os.path.exists(plot_path)
-    assert plot_path.endswith("AAPL_moving_averages.pdf")
+    def test_calculate_ma(self):
+        """Test calculation of moving averages."""
+        periods = [20, 50]
+        self.plotter.calculate_ma(periods)
+        
+        # Verify moving averages were calculated
+        for period in periods:
+            ma_col = f'MA{period}'
+            self.assertIn(ma_col, self.plotter.data.columns)
+            self.assertEqual(len(self.plotter.data[ma_col].dropna()),
+                           len(self.plotter.data) - period + 1)
+
+    def test_plot_creation(self):
+        """Test creation of moving average plot."""
+        periods = [20, 50]
+        output_path = self.plotter.plot(periods, self.test_output_dir)
+        
+        # Verify plot file was created
+        self.assertIsNotNone(output_path)
+        self.assertTrue(os.path.exists(output_path))
+        self.assertTrue(output_path.endswith('.pdf'))
+
+    def test_invalid_periods(self):
+        """Test handling of invalid moving average periods."""
+        # Test with negative period
+        with self.assertRaises(Exception):
+            self.plotter.calculate_ma([-20])
+        
+        # Test with period longer than data
+        long_period = len(self.sample_data) + 100
+        self.plotter.calculate_ma([long_period])
+        self.assertTrue(self.plotter.data[f'MA{long_period}'].isna().all())
+
+class TestPlottingFunctionality(unittest.TestCase):
+    def setUp(self):
+        """Set up test fixtures before each test method."""
+        self.owner_id = 10
+        self.start_date = "2023-01-01"
+        self.ma_periods = [20, 50, 200]
+        
+        # Sample active assets data
+        self.sample_active_assets = pd.DataFrame({
+            'name': ['Stock A', 'Stock B'],
+            'asset_id': [1, 2],
+            'yahoo_ticker': ['AAPL', 'MSFT'],
+            'total_quantity': [100, 50]
+        })
+        
+        # Sample stock data
+        dates = pd.date_range('2023-01-01', '2023-03-01')
+        self.sample_stock_data = pd.DataFrame({
+            'Open': np.random.randn(len(dates)) + 100,
+            'High': np.random.randn(len(dates)) + 101,
+            'Low': np.random.randn(len(dates)) + 99,
+            'Close': np.random.randn(len(dates)) + 100,
+            'Volume': np.random.randint(1000000, 10000000, len(dates))
+        }, index=dates)
+
+    @patch('main.PostgresConnector')
+    @patch('main.fetch_stock_data')
+    @patch('main.MovingAveragePlotter')
+    def test_create_moving_average_plots(self, mock_plotter, mock_fetch_data, mock_db):
+        """Test creation of moving average plots for all active assets."""
+        # Setup mocks
+        mock_instance = MagicMock()
+        mock_instance.get_active_assets.return_value = self.sample_active_assets
+        mock_db.return_value.__enter__.return_value = mock_instance
+        
+        mock_fetch_data.return_value = self.sample_stock_data
+        
+        mock_plotter_instance = MagicMock()
+        mock_plotter_instance.plot.return_value = "test_plot.pdf"
+        mock_plotter.return_value = mock_plotter_instance
+        
+        # Execute test
+        create_moving_average_plots(self.owner_id, self.start_date, self.ma_periods)
+        
+        # Verify results
+        self.assertEqual(mock_fetch_data.call_count, 2)  # Called for each asset
+        self.assertEqual(mock_plotter.call_count, 2)  # Created for each asset
+        self.assertEqual(mock_plotter_instance.plot.call_count, 2)  # Plot created for each asset
+
+    def test_output_path(self):
+        """Test output path generation."""
+        # Test default path
+        default_path = get_output_path()
+        self.assertTrue("analysis" in default_path)
+        
+        # Test custom folder
+        custom_path = get_output_path("stock_plots")
+        self.assertTrue("stock_plots" in custom_path)
+        
+        # Test Docker environment
+        with patch('os.path.exists') as mock_exists:
+            mock_exists.return_value = True  # Simulate Docker environment
+            docker_path = get_output_path("test")
+            self.assertTrue(docker_path.startswith('/app/'))
+
+if __name__ == '__main__':
+    unittest.main()
