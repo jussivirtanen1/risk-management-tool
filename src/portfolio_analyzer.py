@@ -243,6 +243,15 @@ class PortfolioAnalyzer:
             
             # Calculate positions and proportions
             monthly_dates, positions = self.calculate_monthly_positions()
+            # Debug: Print positions DataFrame info
+            print("\nPositions DataFrame Info:")
+            print(f"Shape: {positions.shape}")
+            print("\nColumns:", positions.columns.tolist())
+            print("\nIndex:", positions.index.tolist()[:5], "...")  # First 5 dates
+            print("\nSample data:")
+            print(positions.head())
+            print("\nData types:")
+            print(positions.dtypes)
             proportions = self.calculate_portfolio_proportions(positions)
             
             # Export results
