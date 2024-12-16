@@ -16,7 +16,7 @@ from odf.table import Table, TableRow, TableCell
 from src.db_connector import PostgresConnector
 
 class PortfolioAnalyzer:
-    def __init__(self, owner_id: int, start_date: str = "2020-01-01"):
+    def __init__(self, owner_id: int, start_date: str = "2023-01-01"):
         """
         Initialize Portfolio Analyzer.
         
@@ -343,7 +343,7 @@ class PortfolioAnalyzer:
             print(f"[ANALYZE ERROR] Error during portfolio analysis: {e}")
             return None
 
-def main(owner_id: int = 10, start_date: str = "2020-01-01") -> Optional[pd.DataFrame]:
+def main(owner_id: int = 10, start_date: str = "2023-01-01") -> Optional[pd.DataFrame]:
     """
     Main function to run portfolio analysis.
     
