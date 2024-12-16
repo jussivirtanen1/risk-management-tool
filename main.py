@@ -21,7 +21,7 @@ def run_plotting():
     if data is not None:
         # Create and save plot
         plotter = MovingAveragePlotter(data, symbol)
-        save_path = '/app/output'  # Your existing output path
+        save_path = '/app/stock_plots'  # Your existing output path
         plot_file = plotter.plot(ma_periods, save_path)
         if plot_file:
             print(f"Plot saved to: {plot_file}")
@@ -37,7 +37,11 @@ def main():
     # Run portfolio analysis
     print("\nRunning portfolio analysis...")
     owner_id = int(os.getenv('OWNER_ID', '10'))
-    start_date = os.getenv('START_DATE', '2020-01-01')
+    # Convert start_date string to datetime
+    start_date = datetime.strptime(
+        os.getenv('START_DATE', '2020-01-01'),
+        '%Y-%m-%d'
+    )
     run_portfolio_analysis(owner_id=owner_id, start_date=start_date)
 
 if __name__ == "__main__":
