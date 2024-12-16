@@ -136,11 +136,15 @@ class PortfolioAnalyzer:
         merged_df = self.transactions_df.merge(
             self.assets_df[['asset_id', 'name', 'yahoo_ticker']],
             on='asset_id',
-            how='left'
+            how='left',
+            suffixes=('_trans', '_asset')
         )
-        if merged_df['name'].isnull().any():
+        print("[CALCULATE_MONTHLY_POSITIONS] Merged DataFrame columns:")
+        print(merged_df.columns.tolist())
+
+        if merged_df['name_asset'].isnull().any():
             print("[CALCULATE_MONTHLY_POSITIONS WARNING] Some transactions have missing asset names.")
-        
+
         # Ensure all dates are in pandas datetime format
         merged_df['date'] = pd.to_datetime(merged_df['date'])
         self.price_data.index = pd.to_datetime(self.price_data.index)
@@ -161,8 +165,8 @@ class PortfolioAnalyzer:
             ]
             
             if not valid_transactions.empty:
-                # Aggregate quantities by asset name
-                positions = valid_transactions.groupby('name')['quantity'].sum()
+                # Aggregate quantities by asset name (from assets_df)
+                positions = valid_transactions.groupby('name_asset')['quantity'].sum()
                 
                 # Filter out positions with zero quantity
                 positions = positions[positions != 0]
