@@ -297,6 +297,7 @@ class PortfolioAnalyzer:
             print("[EXPORT_TO_ODS] Header row added.")
             
             # Add data rows
+            print(f"[EXPORT_TO_ODS] Iterating over DataFrame rows: {df}")
             for idx, row in df.iterrows():
                 tr = TableRow()
                 date_cell = TableCell(valuetype="string")
