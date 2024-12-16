@@ -177,48 +177,48 @@ class PortfolioAnalyzer:
             DataFrame with portfolio proportions
         """
         print("[CALCULATE_PORTFOLIO_PROPORTIONS] Calculating portfolio proportions...")
-        # Initialize aligned_prices with the same columns as positions
-        print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Positions DataFrame before alignment:\n{positions}")
-        print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Creating aligned_prices DataFrame...")
-        aligned_prices = pd.DataFrame(index=positions.index, columns=positions.columns).fillna(0)
-        print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Aligned_prices DataFrame after creation:\n{aligned_prices}")
-
-        print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Aligned_prices initialized with shape: {aligned_prices.shape}")
-
-        for date_idx in positions.index:
-            if date_idx in self.price_data.index:
-                price_date = date_idx
-            else:
-                mask = self.price_data.index <= date_idx
-                if not mask.any():
-                    print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] No price data available before or on {date_idx.date()}. Skipping.")
-                    continue
-                price_date = self.price_data.index[mask][-1]
-            
-            try:
-                # Reindex to match positions.columns and fill missing with 0
-                price_series = self.price_data.loc[price_date].reindex(positions.columns).fillna(0)
-                aligned_prices.loc[date_idx] = price_series
-                print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Aligned price for {date_idx.date()} set to price date {price_date.date()}")
-            except Exception as e:
-                print(f"[CALCULATE_PORTFOLIO_PROPORTIONS ERROR] Failed to align price for {date_idx.date()}: {e}")
-                raise e
-
-        print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Aligned_prices shape after alignment: {aligned_prices.shape}")
-
-        # Ensure columns match
-        if set(aligned_prices.columns) != set(positions.columns):
-            print("[CALCULATE_PORTFOLIO_PROPORTIONS WARNING] Mismatch between aligned_prices columns and positions columns. Aligning them.")
-            aligned_prices = aligned_prices.reindex(columns=positions.columns, fill_value=0)
-            print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Aligned_prices shape after reindexing: {aligned_prices.shape}")
-
+        
+        # Ensure that the price_data contains all tickers present in positions
+        missing_tickers = set(positions.columns) - set(self.price_data.columns)
+        if missing_tickers:
+            print(f"[CALCULATE_PORTFOLIO_PROPORTIONS WARNING] Missing tickers in price_data: {missing_tickers}")
+            # Optionally, fetch missing tickers or handle accordingly
+            # For simplicity, we'll add them with zero prices
+            for ticker in missing_tickers:
+                self.price_data[ticker] = 0.0
+        
+        # Reindex price_data to include all dates in positions.index
+        # This ensures that we have price data aligned with each position date
+        aligned_prices = self.price_data.reindex(index=positions.index, method='ffill').fillna(0)
+        
+        # Reindex columns to match positions.columns
+        aligned_prices = aligned_prices.reindex(columns=positions.columns, fill_value=0)
+        
+        print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Aligned_prices shape: {aligned_prices.shape}")
+        print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Aligned_prices head:\n{aligned_prices.head()}")
+        
+        # Debug: Verify alignment
+        if not aligned_prices.index.equals(positions.index):
+            print("[CALCULATE_PORTFOLIO_PROPORTIONS ERROR] Date indices of positions and aligned_prices do not match.")
+            raise ValueError("Date indices alignment mismatch between positions and price_data.")
+        
+        if not set(aligned_prices.columns) == set(positions.columns):
+            print("[CALCULATE_PORTFOLIO_PROPORTIONS ERROR] Column names of positions and aligned_prices do not match.")
+            raise ValueError("Column names alignment mismatch between positions and price_data.")
+        
+        # Calculate portfolio values: Multiply positions by their respective prices
         portfolio_values = positions * aligned_prices
-        print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Portfolio values calculated with shape: {portfolio_values.shape}")
-
-        # Prevent division by zero by replacing zeros with NaN and then filling with zero
+        print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Portfolio values shape: {portfolio_values.shape}")
+        print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Portfolio values head:\n{portfolio_values.head()}")
+        
+        # Calculate total portfolio value per date
         total_values = portfolio_values.sum(axis=1).replace(0, pd.NA)
+        print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Total portfolio values head:\n{total_values.head()}")
+        
+        # Calculate proportions
         proportions = portfolio_values.div(total_values, axis=0).multiply(100).fillna(0)
         proportions = proportions.round(2)
+        
         print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Portfolio proportions calculated with shape: {proportions.shape}")
         print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Proportions DataFrame head:\n{proportions.head()}")
 
