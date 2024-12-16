@@ -50,10 +50,22 @@ class PortfolioAnalyzer:
         print("[FETCH_PORTFOLIO_DATA] Fetching portfolio data from database...")
         with PostgresConnector() as db:
             self.assets_df = db.get_portfolio_assets(self.owner_id)
+            # Add date filter to transactions query
             self.transactions_df = db.get_portfolio_transactions(self.owner_id)
+            if self.transactions_df is not None:
+                # Convert date column to datetime
+                self.transactions_df['date'] = pd.to_datetime(self.transactions_df['date'])
+                # Filter transactions based on start_date
+                self.transactions_df = self.transactions_df[self.transactions_df['date'] >= self.start_date]
+                if self.transactions_df.empty:
+                    print(f"[FETCH_PORTFOLIO_DATA] No transactions found after {self.start_date}")
+        
+        if self.assets_df is None or self.transactions_df is None:
+            raise ValueError("Failed to fetch portfolio data from database")
         
         print(f"[FETCH_PORTFOLIO_DATA] Assets DataFrame shape: {self.assets_df.shape}")
         print(f"[FETCH_PORTFOLIO_DATA] Transactions DataFrame shape: {self.transactions_df.shape}")
+        print(f"[FETCH_PORTFOLIO_DATA] Transaction date range: {self.transactions_df['date'].min()} to {self.transactions_df['date'].max()}")
         print(f"[FETCH_PORTFOLIO_DATA] Assets DataFrame head:\n{self.assets_df.head()}")
         print(f"[FETCH_PORTFOLIO_DATA] Transactions DataFrame head:\n{self.transactions_df.head()}")
 
@@ -75,10 +87,20 @@ class PortfolioAnalyzer:
         # Remove any NaN or None tickers
         tickers = [ticker for ticker in tickers if isinstance(ticker, str) and ticker.strip() != '']
         print(f"[FETCH_MARKET_DATA] Tickers to fetch: {tickers}")
+        
+        if not tickers:
+            raise ValueError("No valid tickers found to fetch market data")
+            
         try:
-            self.price_data = yf.download(tickers, start=self.start_date)['Close']
+            # Add some buffer days to ensure we have enough data
+            start_date = self.start_date - pd.Timedelta(days=10)
+            self.price_data = yf.download(tickers, start=start_date)['Close']
+            if self.price_data.empty:
+                raise ValueError("No price data returned from Yahoo Finance")
+                
             self.price_data = self.price_data.fillna(method='ffill')
             print(f"[FETCH_MARKET_DATA] Price data fetched with shape: {self.price_data.shape}")
+            print(f"[FETCH_MARKET_DATA] Price data date range: {self.price_data.index.min()} to {self.price_data.index.max()}")
             print(f"[FETCH_MARKET_DATA] Price data head:\n{self.price_data.head()}")
             
             # Rename price_data columns from tickers to asset names

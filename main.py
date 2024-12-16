@@ -12,12 +12,17 @@ from src.portfolio_analyzer import PortfolioAnalyzer
 from src.plotter import MovingAveragePlotter
 from src.db_connector import PostgresConnector
 
-def get_output_path() -> str:
-    """Get the path for output files."""
+def get_output_path(folder: str = "analysis") -> str:
+    """
+    Get the path for output files.
+    
+    Args:
+        folder: Name of the output folder
+    """
     if os.path.exists('/.dockerenv'):
-        return '/app/analysis'
+        return f'/app/{folder}'
     else:
-        return str(Path.home() / "Desktop" / "analysis")
+        return str(Path.home() / "Desktop" / folder)
 
 def fetch_stock_data(ticker: str, start_date: str) -> Optional[pd.DataFrame]:
     """
@@ -49,7 +54,7 @@ def create_moving_average_plots(owner_id: int, start_date: str, ma_periods: List
         start_date: Start date for analysis
         ma_periods: List of periods for moving averages
     """
-    output_path = get_output_path()
+    output_path = get_output_path("stock_plots")
     os.makedirs(output_path, exist_ok=True)
     
     # Get active assets
