@@ -32,6 +32,7 @@ class PortfolioAnalyzer:
         self.assets_df = None
         self.transactions_df = None
         self.price_data = None
+        self.name_ticker_map = {}  # Mapping from asset name to Yahoo ticker
 
     @staticmethod
     def get_analysis_path() -> str:
@@ -82,21 +83,40 @@ class PortfolioAnalyzer:
         with PostgresConnector() as db:
             self.assets_df = db.fetch_data(self.get_asset_query())
             self.transactions_df = db.fetch_data(self.get_transactions_query())
+        
         print(f"[FETCH_PORTFOLIO_DATA] Assets DataFrame shape: {self.assets_df.shape}")
         print(f"[FETCH_PORTFOLIO_DATA] Transactions DataFrame shape: {self.transactions_df.shape}")
+        print(f"[FETCH_PORTFOLIO_DATA] Assets DataFrame head:\n{self.assets_df.head()}")
+        print(f"[FETCH_PORTFOLIO_DATA] Transactions DataFrame head:\n{self.transactions_df.head()}")
+
+        # Create a mapping from asset name to Yahoo ticker
+        self.name_ticker_map = pd.Series(
+            self.assets_df.yahoo_ticker.values,
+            index=self.assets_df.name
+        ).to_dict()
+        print(f"[FETCH_PORTFOLIO_DATA] Asset Name to Ticker Mapping:\n{self.name_ticker_map}")
 
     def fetch_market_data(self) -> None:
         """Fetch market data from Yahoo Finance."""
         print("[FETCH_MARKET_DATA] Fetching market data from Yahoo Finance...")
         if self.assets_df is None:
             raise ValueError("Must fetch portfolio data before market data")
-            
-        tickers = self.assets_df['yahoo_ticker'].dropna().unique().tolist()
+        
+        # Extract Yahoo tickers from the name-ticker mapping
+        tickers = list(self.name_ticker_map.values())
+        # Remove any NaN or None tickers
+        tickers = [ticker for ticker in tickers if isinstance(ticker, str) and ticker.strip() != '']
         print(f"[FETCH_MARKET_DATA] Tickers to fetch: {tickers}")
         try:
             self.price_data = yf.download(tickers, start=self.start_date)['Close']
             self.price_data = self.price_data.fillna(method='ffill')
             print(f"[FETCH_MARKET_DATA] Price data fetched with shape: {self.price_data.shape}")
+            print(f"[FETCH_MARKET_DATA] Price data head:\n{self.price_data.head()}")
+            
+            # Rename price_data columns from tickers to asset names
+            ticker_to_name = {v: k for k, v in self.name_ticker_map.items()}
+            self.price_data.rename(columns=ticker_to_name, inplace=True)
+            print(f"[FETCH_MARKET_DATA] Price data columns renamed to asset names:\n{self.price_data.columns.tolist()}")
         except Exception as e:
             print(f"[FETCH_MARKET_DATA ERROR] Failed to fetch price data: {e}")
             raise e
@@ -112,8 +132,17 @@ class PortfolioAnalyzer:
         if self.transactions_df is None or self.price_data is None:
             raise ValueError("Must fetch both transaction and market data first")
 
+        # Merge transactions with asset data to get asset names
+        merged_df = self.transactions_df.merge(
+            self.assets_df[['asset_id', 'name', 'yahoo_ticker']],
+            on='asset_id',
+            how='left'
+        )
+        if merged_df['name'].isnull().any():
+            print("[CALCULATE_MONTHLY_POSITIONS WARNING] Some transactions have missing asset names.")
+        
         # Ensure all dates are in pandas datetime format
-        self.transactions_df['date'] = pd.to_datetime(self.transactions_df['date'])
+        merged_df['date'] = pd.to_datetime(merged_df['date'])
         self.price_data.index = pd.to_datetime(self.price_data.index)
         print("[CALCULATE_MONTHLY_POSITIONS] Converted transaction and price data dates to datetime.")
 
@@ -127,8 +156,8 @@ class PortfolioAnalyzer:
         
         for monthly_date in valid_dates:
             # Keep monthly_date as pandas Timestamp
-            valid_transactions = self.transactions_df[
-                self.transactions_df['date'] <= monthly_date
+            valid_transactions = merged_df[
+                merged_df['date'] <= monthly_date
             ]
             
             if not valid_transactions.empty:
@@ -178,15 +207,15 @@ class PortfolioAnalyzer:
         """
         print("[CALCULATE_PORTFOLIO_PROPORTIONS] Calculating portfolio proportions...")
         
-        # Ensure that the price_data contains all tickers present in positions
-        print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] price_data head: {self.price_data.head()}")
-        missing_tickers = set(positions.columns) - set(self.price_data.columns)
-        if missing_tickers:
-            print(f"[CALCULATE_PORTFOLIO_PROPORTIONS WARNING] Missing tickers in price_data: {missing_tickers}")
-            # Optionally, fetch missing tickers or handle accordingly
+        # Ensure that the price_data contains all asset names present in positions
+        missing_assets = set(positions.columns) - set(self.price_data.columns)
+        if missing_assets:
+            print(f"[CALCULATE_PORTFOLIO_PROPORTIONS WARNING] Missing assets in price_data: {missing_assets}")
+            # Optionally, fetch missing asset prices or handle accordingly
             # For simplicity, we'll add them with zero prices
-            for ticker in missing_tickers:
-                self.price_data[ticker] = 0.0
+            for asset in missing_assets:
+                self.price_data[asset] = 0.0
+            print(f"[CALCULATE_PORTFOLIO_PROPORTIONS INFO] Added missing assets with zero prices: {missing_assets}")
         
         # Reindex price_data to include all dates in positions.index
         # This ensures that we have price data aligned with each position date
@@ -305,6 +334,10 @@ class PortfolioAnalyzer:
             monthly_dates, positions = self.calculate_monthly_positions()
             proportions = self.calculate_portfolio_proportions(positions)
             
+            # Inspect proportions before exporting
+            print(f"[ANALYZE] Proportions DataFrame shape: {proportions.shape}")
+            print(f"[ANALYZE] Proportions DataFrame head:\n{proportions.head()}")
+
             # Export results
             if not proportions.empty:
                 output_path = self.export_to_ods(proportions)
