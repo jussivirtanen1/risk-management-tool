@@ -6,6 +6,7 @@ from src.plotter import MovingAveragePlotter
 from src.data_fetcher import StockDataFetcher
 from src.portfolio_analyzer import main as run_portfolio_analysis
 import os
+from datetime import datetime
 
 def run_plotting():
     """Run the original plotting functionality"""
