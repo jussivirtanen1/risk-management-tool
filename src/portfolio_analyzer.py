@@ -179,7 +179,7 @@ class PortfolioAnalyzer:
         print("[CALCULATE_PORTFOLIO_PROPORTIONS] Calculating portfolio proportions...")
         
         # Ensure that the price_data contains all tickers present in positions
-        print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] price_data head: {price_data.head()}")
+        print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] price_data head: {self.price_data.head()}")
         missing_tickers = set(positions.columns) - set(self.price_data.columns)
         if missing_tickers:
             print(f"[CALCULATE_PORTFOLIO_PROPORTIONS WARNING] Missing tickers in price_data: {missing_tickers}")
