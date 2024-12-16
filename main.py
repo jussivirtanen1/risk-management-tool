@@ -1,55 +1,44 @@
-import os
-from src.data_fetcher import StockDataFetcher
+"""
+Main application script that runs both plotting and portfolio analysis
+"""
+
 from src.plotter import MovingAveragePlotter
-from typing import List
-import logging
+from src.data_fetcher import StockDataFetcher
+from src.portfolio_analyzer import main as run_portfolio_analysis
+import os
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-def process_stock(symbol: str, periods: List[int], save_path: str) -> None:
-    """Process a single stock: fetch data and create plot."""
-    try:
-        fetcher = StockDataFetcher(symbol)
-        data = fetcher.fetch_data(period="1y")
-        
-        if data is not None and not data.empty:
-            plotter = MovingAveragePlotter(data, symbol)
-            plot_path = plotter.plot(periods, save_path="/app/stock_plots")
-            
-            if plot_path:
-                logger.info(f"Plot saved successfully for {symbol} at: {plot_path}")
-            else:
-                logger.error(f"Failed to create plot for {symbol}")
-        else:
-            logger.error(f"Failed to fetch data for {symbol}")
-    except Exception as e:
-        logger.error(f"Error processing {symbol}: {e}")
+def run_plotting():
+    """Run the original plotting functionality"""
+    # Your existing main.py plotting code here
+    symbol = os.getenv('STOCK_SYMBOL', 'AAPL')
+    period = os.getenv('TIME_PERIOD', '1y')
+    ma_periods = [20, 50, 200]
+    
+    # Fetch data
+    fetcher = StockDataFetcher(symbol)
+    data = fetcher.fetch_data(period)
+    
+    if data is not None:
+        # Create and save plot
+        plotter = MovingAveragePlotter(data, symbol)
+        save_path = '/app/output'  # Your existing output path
+        plot_file = plotter.plot(ma_periods, save_path)
+        if plot_file:
+            print(f"Plot saved to: {plot_file}")
+    else:
+        print("Failed to fetch data")
 
 def main():
-    # Get desktop path
-    desktop = os.path.join(os.path.expanduser("~"), "Desktop")
-    output_dir = os.path.join(desktop, "stock_plots")
+    """Run all analyses"""
+    # Run original plotting functionality
+    print("Running plotting analysis...")
+    run_plotting()
     
-    # List of stock symbols to analyze
-    stocks = [
-        "AAPL",    # Apple
-        "MSFT",    # Microsoft
-        "GOOGL",   # Alphabet (Google)
-        "AMZN",    # Amazon
-        "META"     # Meta (Facebook)
-    ]
-    
-    # Moving average periods
-    periods = [20, 50, 200]
-    
-    logger.info(f"Starting analysis for {len(stocks)} stocks...")
-    
-    # Process each stock
-    for symbol in stocks:
-        process_stock(symbol, periods, output_dir)
-    
-    logger.info("Analysis complete. Check the stock_plots directory for PDF files.")
+    # Run portfolio analysis
+    print("\nRunning portfolio analysis...")
+    owner_id = int(os.getenv('OWNER_ID', '10'))
+    start_date = os.getenv('START_DATE', '2020-01-01')
+    run_portfolio_analysis(owner_id=owner_id, start_date=start_date)
 
 if __name__ == "__main__":
     main()

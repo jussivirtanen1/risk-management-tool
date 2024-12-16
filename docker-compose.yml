@@ -11,6 +11,7 @@ services:
     volumes:
       - .:/app
       - ~/Desktop/stock_plots:/app/stock_plots
+      - ~/Desktop/analysis:/app/analysis
     networks:
       - app-network
     extra_hosts:  # Add this section for macOS
