@@ -309,7 +309,8 @@ class PortfolioAnalyzer:
                 for value in row:
                     cell = TableCell(valuetype="float")
                     print(f"[EXPORT_TO_ODS] Processing cell with value: {value}")
-                    cell.addElement(P(text=str(value)))
+                    # Start of Selection
+                    cell.addElement(P(text=f"{value:.2f}"))
                     tr.addElement(cell)
                 table.addElement(tr)
             print("[EXPORT_TO_ODS] Data rows added.")
