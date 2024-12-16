@@ -22,7 +22,7 @@ class PortfolioAnalyzer:
             start_date: Start date for analysis
         """
         self.owner_id = owner_id
-        self.start_date = start_date
+        self.start_date = pd.to_datetime(start_date)
         self.assets_df = None
         self.transactions_df = None
         self.price_data = None
@@ -96,8 +96,9 @@ class PortfolioAnalyzer:
         if self.transactions_df is None or self.price_data is None:
             raise ValueError("Must fetch both transaction and market data first")
 
-        price_data_dates = pd.to_datetime(self.price_data.index)
+        # Ensure all dates are in pandas datetime format
         self.transactions_df['date'] = pd.to_datetime(self.transactions_df['date'])
+        self.price_data.index = pd.to_datetime(self.price_data.index)
         
         monthly_last_dates = self.price_data.groupby(pd.Grouper(freq='ME')).last()
         valid_dates = monthly_last_dates[~monthly_last_dates.isnull().any(axis=1)].index
@@ -106,7 +107,7 @@ class PortfolioAnalyzer:
         final_dates = []
         
         for monthly_date in valid_dates:
-            # Keep monthly_date as pandas Timestamp instead of converting to date
+            monthly_date = pd.to_datetime(monthly_date)
             valid_transactions = self.transactions_df[
                 self.transactions_df['date'] <= monthly_date
             ]
@@ -115,9 +116,9 @@ class PortfolioAnalyzer:
                 positions = valid_transactions.groupby('name')['quantity'].sum()
                 
                 if (positions != 0).any():
-                    positions.name = monthly_date.date()  # Convert to date only when storing
+                    positions.name = monthly_date
                     positions_list.append(positions)
-                    final_dates.append(monthly_date.date())
+                    final_dates.append(monthly_date)
         
         return final_dates, pd.DataFrame(positions_list, index=final_dates)
 
