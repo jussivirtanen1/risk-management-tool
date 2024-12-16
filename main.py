@@ -1,3 +1,5 @@
+# main.py
+
 """
 Main application script that runs both plotting and portfolio analysis
 """
@@ -6,7 +8,6 @@ from src.plotter import MovingAveragePlotter
 from src.data_fetcher import StockDataFetcher
 from src.portfolio_analyzer import main as run_portfolio_analysis
 import os
-from datetime import datetime
 
 def run_plotting():
     """Run the original plotting functionality"""
@@ -38,11 +39,9 @@ def main():
     # Run portfolio analysis
     print("\nRunning portfolio analysis...")
     owner_id = int(os.getenv('OWNER_ID', '10'))
-    # Convert start_date string to datetime
-    start_date = datetime.strptime(
-        os.getenv('START_DATE', '2020-01-01'),
-        '%Y-%m-%d'
-    )
+    start_date = os.getenv('START_DATE', '2020-01-01')
+    
+    # Pass the date as a string, let PortfolioAnalyzer handle the conversion
     run_portfolio_analysis(owner_id=owner_id, start_date=start_date)
 
 if __name__ == "__main__":

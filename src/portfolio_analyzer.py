@@ -1,3 +1,5 @@
+# src/portfolio_analyzer.py
+
 """
 Portfolio Analysis Module
 
@@ -22,6 +24,7 @@ class PortfolioAnalyzer:
             start_date: Start date for analysis
         """
         self.owner_id = owner_id
+        # Convert start_date to pandas Timestamp immediately
         self.start_date = pd.to_datetime(start_date)
         self.assets_df = None
         self.transactions_df = None
@@ -85,8 +88,7 @@ class PortfolioAnalyzer:
         self.price_data = yf.download(tickers, start=self.start_date)['Close']
         self.price_data = self.price_data.fillna(method='ffill')
 
-
-    def calculate_monthly_positions(self) -> Tuple[List[date], pd.DataFrame]:
+    def calculate_monthly_positions(self) -> Tuple[List[pd.Timestamp], pd.DataFrame]:
         """
         Calculate monthly positions considering transaction timing.
         
@@ -100,30 +102,52 @@ class PortfolioAnalyzer:
         self.transactions_df['date'] = pd.to_datetime(self.transactions_df['date'])
         self.price_data.index = pd.to_datetime(self.price_data.index)
         
+        # Group by month end ('ME') frequency
         monthly_last_dates = self.price_data.groupby(pd.Grouper(freq='ME')).last()
         valid_dates = monthly_last_dates[~monthly_last_dates.isnull().any(axis=1)].index
         
-        positions_list = []
-        final_dates = []
+        # Initialize a dictionary to hold date: positions
+        positions_dict = {}
         
         for monthly_date in valid_dates:
-            monthly_date = pd.to_datetime(monthly_date)
+            # Keep monthly_date as pandas Timestamp
             valid_transactions = self.transactions_df[
                 self.transactions_df['date'] <= monthly_date
             ]
             
             if not valid_transactions.empty:
+                # Aggregate quantities by asset name
                 positions = valid_transactions.groupby('name')['quantity'].sum()
                 
-                if (positions != 0).any():
-                    positions.name = monthly_date
-                    positions_list.append(positions)
-                    final_dates.append(monthly_date)
+                # Filter out positions with zero quantity
+                positions = positions[positions != 0]
+                
+                if not positions.empty:
+                    positions_dict[monthly_date] = positions
+                    print(f"Added positions for date: {monthly_date.date()} | Positions: {positions.to_dict()}")
         
-        return final_dates, pd.DataFrame(positions_list, index=final_dates)
+        # Debugging: Print lengths
+        print(f"Total valid_dates: {len(valid_dates)}")
+        print(f"Total positions_dict entries: {len(positions_dict)}")
+        
+        # Ensure that positions_dict is not empty
+        if not positions_dict:
+            raise ValueError("No valid portfolio positions found for the given dates.")
+        
+        # Create DataFrame from the dictionary
+        positions_df = pd.DataFrame.from_dict(positions_dict, orient='index').fillna(0)
+        positions_df.index.name = 'Date'
+        
+        # Sort the DataFrame by Date
+        positions_df.sort_index(inplace=True)
+        
+        print(f"Positions DataFrame shape: {positions_df.shape}")
+        print(f"Positions DataFrame head:\n{positions_df.head()}")
+        
+        return list(positions_df.index), positions_df
 
     def calculate_portfolio_proportions(self, 
-                                     positions: pd.DataFrame) -> pd.DataFrame:
+                                 positions: pd.DataFrame) -> pd.DataFrame:
         """
         Calculate portfolio proportions over time.
         
@@ -181,7 +205,7 @@ class PortfolioAnalyzer:
         header_row = TableRow()
         header_row.addElement(TableCell(valuetype="string", value="Date"))
         for col in df.columns:
-            cell = TableCell(valuetype="string", value=str(col))
+            cell = TableCell(valuetype="string")
             cell.addElement(P(text=str(col)))
             header_row.addElement(cell)
         table.addElement(header_row)
@@ -189,12 +213,12 @@ class PortfolioAnalyzer:
         # Add data rows
         for idx, row in df.iterrows():
             tr = TableRow()
-            date_cell = TableCell(valuetype="string", value=str(idx))
-            date_cell.addElement(P(text=str(idx)))
+            date_cell = TableCell(valuetype="string")
+            date_cell.addElement(P(text=str(idx.date())))
             tr.addElement(date_cell)
             
             for value in row:
-                cell = TableCell(valuetype="float", value=str(value))
+                cell = TableCell(valuetype="float")
                 cell.addElement(P(text=str(value)))
                 tr.addElement(cell)
             table.addElement(tr)
