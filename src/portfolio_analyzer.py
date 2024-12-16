@@ -45,47 +45,12 @@ class PortfolioAnalyzer:
         else:
             return str(Path.home() / "Desktop" / "analysis")
 
-    def get_asset_query(self) -> str:
-        """Get SQL query for fetching asset information."""
-        return f"""
-            SELECT 
-                id.name,
-                id.asset_id,
-                id.yahoo_ticker,
-                id.yahoo_fx_ticker,
-                info.instrument
-            FROM asset_management_test.asset_ids AS id
-            LEFT JOIN asset_management_test.asset_owner AS own 
-                ON id.asset_id = own.asset_id
-            LEFT JOIN asset_management_test.asset_info AS info 
-                ON id.asset_id = info.asset_id
-            WHERE owner_id = {self.owner_id}
-        """
-
-    def get_transactions_query(self) -> str:
-        """Get SQL query for fetching transaction data."""
-        return f"""
-            SELECT 
-                event_type,
-                asset_id,
-                owner_id,
-                name,
-                date,
-                quantity,
-                price_fx,
-                price_eur,
-                amount
-            FROM asset_management_test.asset_transactions
-            WHERE owner_id = {self.owner_id}
-            ORDER BY date ASC
-        """
-
     def fetch_portfolio_data(self) -> None:
         """Fetch asset and transaction data from database."""
         print("[FETCH_PORTFOLIO_DATA] Fetching portfolio data from database...")
         with PostgresConnector() as db:
-            self.assets_df = db.fetch_data(self.get_asset_query())
-            self.transactions_df = db.fetch_data(self.get_transactions_query())
+            self.assets_df = db.get_portfolio_assets(self.owner_id)
+            self.transactions_df = db.get_portfolio_transactions(self.owner_id)
         
         print(f"[FETCH_PORTFOLIO_DATA] Assets DataFrame shape: {self.assets_df.shape}")
         print(f"[FETCH_PORTFOLIO_DATA] Transactions DataFrame shape: {self.transactions_df.shape}")

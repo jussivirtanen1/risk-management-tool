@@ -176,6 +176,66 @@ class PostgresConnector:
             query += f" WHERE asset_id = {asset_id}"
         return self.fetch_data(query)
 
+    def get_portfolio_assets(self, owner_id: int) -> Optional[pd.DataFrame]:
+        """Get SQL query for fetching asset information for a specific owner."""
+        query = f"""
+            SELECT 
+                id.name,
+                id.asset_id,
+                id.yahoo_ticker,
+                id.yahoo_fx_ticker,
+                info.instrument
+            FROM asset_management_test.asset_ids AS id
+            LEFT JOIN asset_management_test.asset_owner AS own 
+                ON id.asset_id = own.asset_id
+            LEFT JOIN asset_management_test.asset_info AS info 
+                ON id.asset_id = info.asset_id
+            WHERE owner_id = {owner_id}
+        """
+        return self.fetch_data(query)
+
+    def get_portfolio_transactions(self, owner_id: int) -> Optional[pd.DataFrame]:
+        """Get SQL query for fetching transaction data for a specific owner."""
+        query = f"""
+            SELECT 
+                event_type,
+                asset_id,
+                owner_id,
+                name,
+                date,
+                quantity,
+                price_fx,
+                price_eur,
+                amount
+            FROM asset_management_test.asset_transactions
+            WHERE owner_id = {owner_id}
+            ORDER BY date ASC
+        """
+        return self.fetch_data(query)
+
+    def get_active_assets(self, owner_id: int) -> Optional[pd.DataFrame]:
+        """Get assets with quantity > 0 for a specific owner."""
+        query = f"""
+            WITH current_positions AS (
+                SELECT 
+                    asset_id,
+                    SUM(quantity) as total_quantity
+                FROM asset_management_test.asset_transactions
+                WHERE owner_id = {owner_id}
+                GROUP BY asset_id
+                HAVING SUM(quantity) > 0
+            )
+            SELECT 
+                id.name,
+                id.asset_id,
+                id.yahoo_ticker,
+                cp.total_quantity
+            FROM current_positions cp
+            JOIN asset_management_test.asset_ids id ON cp.asset_id = id.asset_id
+            WHERE id.yahoo_ticker IS NOT NULL AND id.yahoo_ticker != ''
+        """
+        return self.fetch_data(query)
+
     def close(self):
         """Close database connection and cursor."""
         if self.cur:

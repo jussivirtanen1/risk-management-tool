@@ -1,48 +1,113 @@
-# main.py
-
 """
-Main application script that runs both plotting and portfolio analysis
+Main module for running portfolio analysis and plotting.
 """
 
-from src.plotter import MovingAveragePlotter
-from src.data_fetcher import StockDataFetcher
-from src.portfolio_analyzer import main as run_portfolio_analysis
+import yfinance as yf
+import pandas as pd
+from datetime import datetime, timedelta
+from pathlib import Path
 import os
+from typing import List, Optional
+from src.portfolio_analyzer import PortfolioAnalyzer
+from src.plotter import MovingAveragePlotter
+from src.db_connector import PostgresConnector
 
-def run_plotting():
-    """Run the original plotting functionality"""
-    # Your existing main.py plotting code here
-    symbol = os.getenv('STOCK_SYMBOL', 'AAPL')
-    period = os.getenv('TIME_PERIOD', '1y')
-    ma_periods = [20, 50, 200]
-    
-    # Fetch data
-    fetcher = StockDataFetcher(symbol)
-    data = fetcher.fetch_data(period)
-    
-    if data is not None:
-        # Create and save plot
-        plotter = MovingAveragePlotter(data, symbol)
-        save_path = '/app/stock_plots'  # Your existing output path
-        plot_file = plotter.plot(ma_periods, save_path)
-        if plot_file:
-            print(f"Plot saved to: {plot_file}")
+def get_output_path() -> str:
+    """Get the path for output files."""
+    if os.path.exists('/.dockerenv'):
+        return '/app/analysis'
     else:
-        print("Failed to fetch data")
+        return str(Path.home() / "Desktop" / "analysis")
 
-def main():
-    """Run all analyses"""
-    # Run original plotting functionality
-    print("Running plotting analysis...")
-    run_plotting()
+def fetch_stock_data(ticker: str, start_date: str) -> Optional[pd.DataFrame]:
+    """
+    Fetch stock data from Yahoo Finance.
     
-    # Run portfolio analysis
-    print("\nRunning portfolio analysis...")
-    owner_id = int(os.getenv('OWNER_ID', '10'))
-    start_date = os.getenv('START_DATE', '2020-01-01')
+    Args:
+        ticker: Yahoo Finance ticker symbol
+        start_date: Start date for data fetching
+        
+    Returns:
+        Optional[pd.DataFrame]: Stock price data or None if fetch fails
+    """
+    try:
+        data = yf.download(ticker, start=start_date)
+        if data.empty:
+            print(f"No data found for ticker {ticker}")
+            return None
+        return data
+    except Exception as e:
+        print(f"Error fetching data for {ticker}: {e}")
+        return None
+
+def create_moving_average_plots(owner_id: int, start_date: str, ma_periods: List[int]) -> None:
+    """
+    Create moving average plots for all active assets.
     
-    # Pass the date as a string, let PortfolioAnalyzer handle the conversion
-    run_portfolio_analysis(owner_id=owner_id, start_date=start_date)
+    Args:
+        owner_id: ID of the portfolio owner
+        start_date: Start date for analysis
+        ma_periods: List of periods for moving averages
+    """
+    output_path = get_output_path()
+    os.makedirs(output_path, exist_ok=True)
+    
+    # Get active assets
+    with PostgresConnector() as db:
+        active_assets = db.get_active_assets(owner_id)
+    
+    if active_assets is None or active_assets.empty:
+        print("No active assets found")
+        return
+    
+    print(f"Found {len(active_assets)} active assets")
+    
+    # Create plots for each active asset
+    for _, asset in active_assets.iterrows():
+        ticker = asset['yahoo_ticker']
+        name = asset['name']
+        print(f"\nProcessing {name} ({ticker})")
+        
+        # Fetch stock data
+        stock_data = fetch_stock_data(ticker, start_date)
+        if stock_data is None:
+            continue
+        
+        # Create and save plot
+        plotter = MovingAveragePlotter(stock_data, name)
+        plot_path = plotter.plot(ma_periods, output_path)
+        
+        if plot_path:
+            print(f"Created plot for {name}: {plot_path}")
+        else:
+            print(f"Failed to create plot for {name}")
+
+def main(owner_id: int = 10, start_date: str = "2020-01-01", ma_periods: List[int] = [20, 50, 200]) -> None:
+    """
+    Main function to run portfolio analysis and create plots.
+    
+    Args:
+        owner_id: ID of the portfolio owner
+        start_date: Start date for analysis
+        ma_periods: List of periods for moving averages
+    """
+    try:
+        # Run portfolio analysis
+        print("\n=== Running Portfolio Analysis ===")
+        analyzer = PortfolioAnalyzer(owner_id, start_date)
+        portfolio_data = analyzer.analyze()
+        
+        if portfolio_data is not None:
+            print("Portfolio analysis completed successfully")
+        else:
+            print("Portfolio analysis failed")
+        
+        # Create moving average plots
+        print("\n=== Creating Moving Average Plots ===")
+        create_moving_average_plots(owner_id, start_date, ma_periods)
+        
+    except Exception as e:
+        print(f"Error in main execution: {e}")
 
 if __name__ == "__main__":
-    main()
+    main() 
