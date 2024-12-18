@@ -12,15 +12,13 @@ class PostgresConnector:
         Initialize PostgreSQL database connection parameters.
         Loads from environment variables by default, but allows override through kwargs
         """
-        # Load the appropriate .env file based on environment
-        db_param = os.getenv('DB_PARAM', '')
-        # Convert underscore to dot for env file naming
-        env_suffix = db_param.replace('_', '.') if db_param else ''
-        env_file = f".env{env_suffix}"
-        load_dotenv(env_file)
-        
         # Store environment for later checks
         self.db_param = os.getenv('DB_PARAM', '_test')
+        
+        # Convert underscore to dot for env file naming
+        env_suffix = self.db_param.replace('_', '.')
+        env_file = f".env{env_suffix}"
+        load_dotenv(env_file)
         
         # Set database name based on environment
         db_suffix = self.db_param
