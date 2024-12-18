@@ -3,19 +3,19 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ${IMAGE_NAME:-asset-management}:${TAG:-latest}
+    image: ${IMAGE_NAME:-asset-management}:${TAG:-latest}${ENV:-}
     env_file:
       - .env.${ENVIRONMENT:-dev}
     environment:
       - DB_HOST=host.docker.internal
-      - DB_PARAM=${DB_PARAM:-_test}
+      - DB_PARAM=${DB_PARAM}
     volumes:
       - .:/app
       - ~/Desktop/stock_plots:/app/stock_plots
       - ~/Desktop/analysis:/app/analysis
     networks:
       - app-network
-    extra_hosts:  # Add this section for macOS
+    extra_hosts:
       - "host.docker.internal:host-gateway"
 
 networks:

@@ -20,10 +20,10 @@ class PostgresConnector:
         load_dotenv(env_file)
         
         # Store environment for later checks
-        self.db_param = db_param
+        self.db_param = os.getenv('DB_PARAM', '_test')
         
         # Set database name based on environment
-        db_suffix = "_prod" if db_param == "_prod" else "_test"
+        db_suffix = self.db_param
         default_db_name = f"am_db{db_suffix}"
         
         # Default configuration from environment variables
@@ -39,7 +39,7 @@ class PostgresConnector:
         self.config.update(kwargs)
         
         # Set schema based on environment
-        self.schema = f"asset_management{db_suffix}"
+        self.schema = f"asset_management{self.db_param}"
         self.conn = None
         self.cur = None
 
