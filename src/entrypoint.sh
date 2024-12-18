@@ -3,31 +3,29 @@ set -e
 
 # Function to run tests
 run_tests() {
-    echo "Running tests..."
+    echo "============================================"
+    echo "Starting test execution in test environment"
+    echo "============================================"
+    
     pytest tests/ -v
-    return $?
-}
-
-# Function to start the application
-start_app() {
-    echo "Starting the application..."
-    exec python main.py
+    TEST_RESULT=$?
+    
+    echo "============================================"
+    if [ $TEST_RESULT -eq 0 ]; then
+        echo "✅ All tests passed successfully"
+    else
+        echo "❌ Tests failed with exit code: $TEST_RESULT"
+    fi
+    echo "============================================"
+    
+    return $TEST_RESULT
 }
 
 # Main execution
 if [ "$ENV" = "_test" ]; then
-    echo "Test environment detected."
     run_tests
-    TEST_RESULT=$?
-    
-    if [ $TEST_RESULT -eq 0 ]; then
-        echo "Tests passed successfully."
-        start_app
-    else
-        echo "Tests failed. Application will not start."
-        exit $TEST_RESULT
-    fi
+    exit $?
 else
-    echo "Environment: ${ENV:-default}"
-    start_app
+    echo "Starting application in ${ENV:-default} environment"
+    exec python main.py
 fi 

@@ -99,7 +99,7 @@ class PostgresConnector:
             return pd.DataFrame(data, columns=columns)
             
         except Exception as e:
-            print(f"Error executing query: {e}")
+            print(f"Database error: {e}")
             return None
 
     def execute_query(self, query: str, params: Optional[Dict[str, Any]] = None) -> bool:
@@ -126,7 +126,7 @@ class PostgresConnector:
             return True
             
         except Exception as e:
-            print(f"Error executing query: {e}")
+            print(f"Database error: {e}")
             if self.conn:
                 self.conn.rollback()
             return False
