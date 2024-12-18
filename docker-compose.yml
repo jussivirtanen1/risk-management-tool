@@ -8,6 +8,7 @@ services:
       - .env.${ENVIRONMENT:-dev}
     environment:
       - DB_HOST=host.docker.internal
+      - DB_PARAM
     volumes:
       - .:/app
       - ~/Desktop/stock_plots:/app/stock_plots
