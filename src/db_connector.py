@@ -141,7 +141,7 @@ class PostgresConnector:
         Returns:
             Optional[pd.DataFrame]: Asset information
         """
-        query = "SELECT * FROM asset_management_test.asset_info"
+        query = f"SELECT * FROM {self.schema}.asset_info"
         if asset_id is not None:
             query += f" WHERE asset_id = {asset_id}"
         return self.fetch_data(query)
@@ -161,7 +161,7 @@ class PostgresConnector:
         Returns:
             Optional[pd.DataFrame]: Transaction data
         """
-        query = "SELECT * FROM asset_management_test.asset_transactions"
+        query = f"SELECT * FROM {self.schema}.asset_transactions"
         conditions = []
         
         if asset_id is not None:
@@ -186,7 +186,7 @@ class PostgresConnector:
         Returns:
             Optional[pd.DataFrame]: Asset ownership data
         """
-        query = "SELECT * FROM asset_management_test.asset_owner"
+        query = f"SELECT * FROM {self.schema}.asset_owner"
         if asset_id is not None:
             query += f" WHERE asset_id = {asset_id}"
         return self.fetch_data(query)
@@ -201,7 +201,7 @@ class PostgresConnector:
         Returns:
             Optional[pd.DataFrame]: Asset identification data
         """
-        query = "SELECT * FROM asset_management_test.asset_ids"
+        query = f"SELECT * FROM {self.schema}.asset_ids"
         if asset_id is not None:
             query += f" WHERE asset_id = {asset_id}"
         return self.fetch_data(query)
@@ -215,10 +215,10 @@ class PostgresConnector:
                 id.yahoo_ticker,
                 id.yahoo_fx_ticker,
                 info.instrument
-            FROM asset_management_test.asset_ids AS id
-            LEFT JOIN asset_management_test.asset_owner AS own 
+            FROM {self.schema}.asset_ids AS id
+            LEFT JOIN {self.schema}.asset_owner AS own 
                 ON id.asset_id = own.asset_id
-            LEFT JOIN asset_management_test.asset_info AS info 
+            LEFT JOIN {self.schema}.asset_info AS info 
                 ON id.asset_id = info.asset_id
             WHERE owner_id = {owner_id}
         """
@@ -237,7 +237,7 @@ class PostgresConnector:
                 price_fx,
                 price_eur,
                 amount
-            FROM asset_management_test.asset_transactions
+            FROM {self.schema}.asset_transactions
             WHERE owner_id = {owner_id}
             ORDER BY date ASC
         """
@@ -250,7 +250,7 @@ class PostgresConnector:
                 SELECT 
                     asset_id,
                     SUM(quantity) as total_quantity
-                FROM asset_management_test.asset_transactions
+                FROM {self.schema}.asset_transactions
                 WHERE owner_id = {owner_id}
                 GROUP BY asset_id
                 HAVING SUM(quantity) > 0
@@ -261,7 +261,7 @@ class PostgresConnector:
                 id.yahoo_ticker,
                 cp.total_quantity
             FROM current_positions cp
-            JOIN asset_management_test.asset_ids id ON cp.asset_id = id.asset_id
+            JOIN {self.schema}.asset_ids id ON cp.asset_id = id.asset_id
             WHERE id.yahoo_ticker IS NOT NULL AND id.yahoo_ticker != ''
         """
         return self.fetch_data(query)
