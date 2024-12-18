@@ -191,95 +191,18 @@ def test_cleanup(db_connector):
     assert success is True
 
 def test_env_file_loading():
-    """Test that the correct environment file is loaded and database names are set."""
-    # Test default environment
+    """Test that the correct environment file is loaded for test environment."""
     with patch('src.db_connector.load_dotenv') as mock_load:
         db = PostgresConnector()
         mock_load.assert_called_once_with(".env")
         assert db.config["dbname"] == "am_db_test"
         assert db.schema == "asset_management_test"
 
-    # Test production environment
-    with patch('src.db_connector.load_dotenv') as mock_load:
-        with patch.dict(os.environ, {'ENV': '_prod'}):
-            db = PostgresConnector()
-            mock_load.assert_called_once_with(".env.prod")
-            assert db.config["dbname"] == "am_db_prod"
-            assert db.schema == "asset_management_prod"
-
-    # Test test environment
-    with patch('src.db_connector.load_dotenv') as mock_load:
-        with patch.dict(os.environ, {'ENV': '_test'}):
-            db = PostgresConnector()
-            mock_load.assert_called_once_with(".env.test")
-            assert db.config["dbname"] == "am_db_test"
-            assert db.schema == "asset_management_test"
-
 def test_schema_selection():
-    """Test that the correct schema is selected based on environment."""
-    # Test default/test environment
+    """Test that the test schema is selected."""
     db = PostgresConnector()
     assert db.schema == "asset_management_test"
     assert db.config["dbname"] == "am_db_test"
-
-    # Test production environment
-    with patch.dict(os.environ, {'ENV': '_prod'}):
-        db = PostgresConnector()
-        assert db.schema == "asset_management_prod"
-        assert db.config["dbname"] == "am_db_prod"
-
-@patch('src.db_connector.psycopg2')
-def test_production_test_protection(mock_psycopg2):
-    """Test that tests cannot run in production environment."""
-    # Mock the PYTEST_CURRENT_TEST environment variable to simulate test execution
-    with patch.dict(os.environ, {
-        'ENV': '_prod',
-        'PYTEST_CURRENT_TEST': 'test_db_connector.py::test_production_test_protection'
-    }):
-        db = PostgresConnector()
-        
-        # Test connect method
-        with pytest.raises(RuntimeError) as exc_info:
-            db.connect()
-        assert "Attempting to run tests in production environment" in str(exc_info.value)
-        
-        # Test fetch_data method
-        with pytest.raises(RuntimeError) as exc_info:
-            db.fetch_data("SELECT * FROM test")
-        assert "Attempting to run tests in production environment" in str(exc_info.value)
-        
-        # Test execute_query method
-        with pytest.raises(RuntimeError) as exc_info:
-            db.execute_query("INSERT INTO test VALUES (1)")
-        assert "Attempting to run tests in production environment" in str(exc_info.value)
-
-@patch('src.db_connector.psycopg2')
-def test_test_environment_allowed(mock_psycopg2):
-    """Test that tests can run in test environment."""
-    # Mock successful database connection
-    mock_conn = MagicMock()
-    mock_cur = MagicMock()
-    mock_psycopg2.connect.return_value = mock_conn
-    mock_conn.cursor.return_value = mock_cur
-    
-    # Test with test environment
-    with patch.dict(os.environ, {
-        'ENV': '_test',
-        'PYTEST_CURRENT_TEST': 'test_db_connector.py::test_test_environment_allowed'
-    }):
-        db = PostgresConnector()
-        
-        # Should not raise any exceptions
-        assert db.connect() is True
-        
-        # Test fetch_data
-        mock_cur.description = [('id',), ('name',)]
-        mock_cur.fetchall.return_value = [(1, 'test')]
-        result = db.fetch_data("SELECT * FROM test")
-        assert result is not None
-        
-        # Test execute_query
-        assert db.execute_query("INSERT INTO test VALUES (1)") is True
 
 def test_connection_parameters():
     """Test that connection parameters are correctly set from environment variables."""

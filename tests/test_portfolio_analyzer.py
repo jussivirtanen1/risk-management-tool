@@ -188,13 +188,13 @@ def test_empty_portfolio(mock_db):
     """Test handling of empty portfolio data."""
     # Setup mock database connector with empty data
     mock_instance = MagicMock()
-    mock_instance.get_portfolio_assets.return_value = pd.DataFrame()
-    mock_instance.get_portfolio_transactions.return_value = pd.DataFrame()
+    mock_instance.get_portfolio_assets.return_value = pd.DataFrame(columns=['name', 'asset_id', 'yahoo_ticker', 'yahoo_fx_ticker', 'instrument'])
+    mock_instance.get_portfolio_transactions.return_value = pd.DataFrame(columns=['event_type', 'asset_id', 'owner_id', 'name', 'date', 'quantity', 'price_fx', 'price_eur', 'amount'])
     mock_db.return_value.__enter__.return_value = mock_instance
-    
+
     # Execute test
     analyzer = PortfolioAnalyzer(owner_id=10, start_date="2023-01-01")
     result = analyzer.analyze()
-    
-    # Verify results
-    assert result is None
+
+    # Verify result
+    assert result is None  # Should return None for empty portfolio

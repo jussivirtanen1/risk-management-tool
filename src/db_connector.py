@@ -13,17 +13,17 @@ class PostgresConnector:
         Loads from environment variables by default, but allows override through kwargs
         """
         # Load the appropriate .env file based on environment
-        env = os.getenv('ENV', '')
+        db_param = os.getenv('DB_PARAM', '')
         # Convert underscore to dot for env file naming
-        env_suffix = env.replace('_', '.') if env else ''
+        env_suffix = db_param.replace('_', '.') if db_param else ''
         env_file = f".env{env_suffix}"
         load_dotenv(env_file)
         
         # Store environment for later checks
-        self.environment = env
+        self.db_param = db_param
         
         # Set database name based on environment
-        db_suffix = "_prod" if env == "_prod" else "_test"
+        db_suffix = "_prod" if db_param == "_prod" else "_test"
         default_db_name = f"am_db{db_suffix}"
         
         # Default configuration from environment variables
@@ -45,7 +45,7 @@ class PostgresConnector:
 
     def _check_test_protection(self):
         """Check if we're trying to run tests in production environment."""
-        if self.environment == "_prod" and os.getenv('PYTEST_CURRENT_TEST'):
+        if self.db_param == "_prod" and os.getenv('PYTEST_CURRENT_TEST'):
             raise RuntimeError(
                 "ERROR: Attempting to run tests in production environment. "
                 "This is not allowed to protect production data."

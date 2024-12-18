@@ -338,31 +338,32 @@ class PortfolioAnalyzer:
         Returns:
             DataFrame with portfolio proportions or None if analysis fails
         """
-        # print("[ANALYZE] Starting portfolio analysis...")
         try:
             # Fetch all required data
             self.fetch_portfolio_data()
-            self.fetch_market_data()
             
+            # If we have no assets or transactions, return None early
+            if self.assets_df.empty or self.transactions_df.empty:
+                return None
+            
+            try:
+                self.fetch_market_data()
+            except ValueError as e:
+                if "No valid tickers found" in str(e):
+                    return None
+                raise e
+
             # Calculate positions and proportions
             monthly_dates, positions = self.calculate_monthly_positions()
             proportions = self.calculate_portfolio_proportions(positions)
-            
-            # Inspect proportions before exporting
-            # print(f"[ANALYZE] Proportions DataFrame shape: {proportions.shape}")
-            # print(f"[ANALYZE] Proportions DataFrame head:\n{proportions.head()}")
 
             # Export results
             if not proportions.empty:
-                output_path = self.export_to_ods(proportions)
-                # print(f"[ANALYZE] Portfolio analysis exported to: {output_path}")
+                self.export_to_ods(proportions)
                 return proportions
-            # else:
-            #     print("[ANALYZE] No valid portfolio data to analyze")
             return None
                 
         except Exception as e:
-            # print(f"[ANALYZE ERROR] Error during portfolio analysis: {e}")
             raise ValueError(f"Error during portfolio analysis: {e}")
 
 def main(owner_id: int = 10, start_date: str = "2023-01-01") -> Optional[pd.DataFrame]:
