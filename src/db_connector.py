@@ -257,9 +257,23 @@ class PostgresConnector:
                 cp.total_quantity
             FROM current_positions cp
             JOIN {self.schema}.asset_ids id ON cp.asset_id = id.asset_id
-            WHERE id.yahoo_ticker IS NOT NULL AND id.yahoo_ticker != ''
+            WHERE id.yahoo_ticker IS NOT NULL 
+            AND id.yahoo_ticker != ''
+            AND id.yahoo_ticker NOT LIKE '%.%'  -- Exclude tickers with dots
+            ORDER BY id.asset_id;  -- Add ordering for easier comparison
         """
-        return self.fetch_data(query)
+        
+        # Debug print
+        print("\nExecuting query:")
+        print(query)
+        
+        result = self.fetch_data(query)
+        
+        if result is not None:
+            print(f"\nFound {len(result)} assets:")
+            print(result[['name', 'asset_id', 'yahoo_ticker', 'total_quantity']])
+        
+        return result
 
     def close(self):
         """Close database connection and cursor."""
