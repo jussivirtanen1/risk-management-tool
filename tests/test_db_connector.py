@@ -194,7 +194,7 @@ def test_env_file_loading():
     """Test that the correct environment file is loaded for test environment."""
     with patch('src.db_connector.load_dotenv') as mock_load:
         db = PostgresConnector()
-        mock_load.assert_called_once_with(".env")
+        mock_load.assert_called_once_with(".env.test")
         assert db.config["dbname"] == "am_db_test"
         assert db.schema == "asset_management_test"
 

@@ -3,11 +3,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ${IMAGE_NAME:-asset-management}:${TAG:-latest}${ENV:-}
+    image: ${IMAGE_NAME:-asset-management}:${TAG:-latest}
     env_file:
       - .env.${ENVIRONMENT:-dev}
     environment:
       - DB_HOST=host.docker.internal
+      - DB_PARAM=${DB_PARAM:-_test}
     volumes:
       - .:/app
       - ~/Desktop/stock_plots:/app/stock_plots
