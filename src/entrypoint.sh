@@ -31,4 +31,4 @@ if [ -z "$DB_PASSWORD" ]; then
 fi
 
 echo "Starting application with environment: $DB_PARAM"
-exec "$@"
+exec python main.py
