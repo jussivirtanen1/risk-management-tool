@@ -5,13 +5,16 @@ services:
       dockerfile: Dockerfile
     image: ${IMAGE_NAME:-asset-management}:${TAG:-latest}${ENV:-}
     env_file:
-      - .env.${ENVIRONMENT:-dev}
+      - .env.${DB_PARAM:-test}
     environment:
       - DB_HOST=host.docker.internal
+      # Required inputs
       - DB_PARAM
+      - DB_USER
       - DB_PASSWORD
-      # Default database connection details
-      - DB_USER=${DB_USER:-docker_app}
+      # Automatically configured
+      - DB_NAME=am_db_${DB_PARAM}
+      - DB_SCHEMA=asset_management_${DB_PARAM}
     volumes:
       - .:/app
       - ~/Desktop/stock_plots:/app/stock_plots

@@ -12,22 +12,21 @@ class PostgresConnector:
         Initialize PostgreSQL database connection parameters.
         Loads from environment variables by default, but allows override through kwargs
         """
-        # Store environment for later checks
-        self.db_param = os.getenv('DB_PARAM', '_test')
+        # Get DB_PARAM and remove any leading underscore
+        self.db_param = os.getenv('DB_PARAM', 'test').lstrip('_')
         
-        # Convert underscore to dot for env file naming
-        env_suffix = self.db_param.replace('_', '.')
-        env_file = f".env{env_suffix}"
+        # Load the appropriate environment file
+        env_file = f".env.{self.db_param}"
         load_dotenv(env_file)
         
-        # Set database name based on environment
-        db_suffix = self.db_param
-        default_db_name = f"am_db{db_suffix}"
+        # Set database name and schema based on environment
+        default_db_name = f"am_db_{self.db_param}"
+        self.schema = f"asset_management_{self.db_param}"
         
         # Default configuration from environment variables
         self.config = {
             "dbname": os.getenv("DB_NAME", default_db_name),
-            "user": os.getenv("DB_USER", "docker_app"),
+            "user": os.getenv("DB_USER"),
             "password": os.getenv("DB_PASSWORD"),
             "host": os.getenv("DB_HOST", "localhost"),
             "port": os.getenv("DB_PORT", "5432")
@@ -36,8 +35,6 @@ class PostgresConnector:
         # Override with any provided kwargs
         self.config.update(kwargs)
         
-        # Set schema based on environment
-        self.schema = f"asset_management{self.db_param}"
         self.conn = None
         self.cur = None
 
