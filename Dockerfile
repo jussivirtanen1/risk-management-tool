@@ -1,17 +1,22 @@
 FROM python:3.12-slim
 
-# Install PostgreSQL client and necessary SSL libraries
-RUN apt-get update && apt-get install -y \
-    postgresql-client \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first to leverage Docker cache
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy the rest of the application
 COPY . .
-ENV PYTHONPATH=/app
 
-CMD ["python", "main.py"]
+# Ensure proper permissions for entrypoint script
+COPY src/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Set the entrypoint script
+ENTRYPOINT ["/entrypoint.sh"]

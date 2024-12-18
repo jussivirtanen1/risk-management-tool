@@ -12,11 +12,23 @@ class PostgresConnector:
         Initialize PostgreSQL database connection parameters.
         Loads from environment variables by default, but allows override through kwargs
         """
-        load_dotenv()  # Load environment variables from .env file
+        # Load the appropriate .env file based on environment
+        env = os.getenv('ENV', '')
+        # Convert underscore to dot for env file naming
+        env_suffix = env.replace('_', '.') if env else ''
+        env_file = f".env{env_suffix}"
+        load_dotenv(env_file)
+        
+        # Store environment for later checks
+        self.environment = env
+        
+        # Set database name based on environment
+        db_suffix = "_prod" if env == "_prod" else "_test"
+        default_db_name = f"am_db{db_suffix}"
         
         # Default configuration from environment variables
         self.config = {
-            "dbname": os.getenv("DB_NAME", "am_db_test"),
+            "dbname": os.getenv("DB_NAME", default_db_name),
             "user": os.getenv("DB_USER", "docker_app"),
             "password": os.getenv("DB_PASSWORD"),
             "host": os.getenv("DB_HOST", "localhost"),
@@ -26,9 +38,18 @@ class PostgresConnector:
         # Override with any provided kwargs
         self.config.update(kwargs)
         
-        self.schema = "asset_management_test"
+        # Set schema based on environment
+        self.schema = f"asset_management{db_suffix}"
         self.conn = None
         self.cur = None
+
+    def _check_test_protection(self):
+        """Check if we're trying to run tests in production environment."""
+        if self.environment == "_prod" and os.getenv('PYTEST_CURRENT_TEST'):
+            raise RuntimeError(
+                "ERROR: Attempting to run tests in production environment. "
+                "This is not allowed to protect production data."
+            )
 
     def connect(self) -> bool:
         """
@@ -38,6 +59,9 @@ class PostgresConnector:
             bool: True if connection successful, False otherwise
         """
         try:
+            # Check for test protection
+            self._check_test_protection()
+            
             self.conn = psycopg2.connect(**self.config)
             self.cur = self.conn.cursor()
             
@@ -61,6 +85,9 @@ class PostgresConnector:
             Optional[pd.DataFrame]: Query results as DataFrame or None if query fails
         """
         try:
+            # Check for test protection
+            self._check_test_protection()
+            
             if not self.conn or not self.cur:
                 if not self.connect():
                     return None
@@ -87,6 +114,9 @@ class PostgresConnector:
             bool: True if query executed successfully, False otherwise
         """
         try:
+            # Check for test protection
+            self._check_test_protection()
+            
             if not self.conn or not self.cur:
                 if not self.connect():
                     return False
