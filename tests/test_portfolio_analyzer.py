@@ -21,8 +21,7 @@ def sample_assets():
         'name': ['Stock A', 'Stock B'],
         'asset_id': [1, 2],
         'yahoo_ticker': ['AAPL', 'MSFT'],
-        'yahoo_fx_ticker': ['USDEUR=X', 'USDEUR=X'],
-        'instrument': ['stock', 'stock']
+        'total_quantity': [100, 50]
     })
 
 @pytest.fixture
@@ -54,7 +53,7 @@ def test_fetch_portfolio_data(mock_db, analyzer, sample_assets, sample_transacti
     """Test fetching portfolio data from database."""
     # Setup mock database connector
     mock_instance = MagicMock()
-    mock_instance.get_portfolio_assets.return_value = sample_assets
+    mock_instance.get_active_assets.return_value = sample_assets
     mock_instance.get_portfolio_transactions.return_value = sample_transactions
     mock_db.return_value.__enter__.return_value = mock_instance
     
@@ -188,8 +187,11 @@ def test_empty_portfolio(mock_db):
     """Test handling of empty portfolio data."""
     # Setup mock database connector with empty data
     mock_instance = MagicMock()
-    mock_instance.get_portfolio_assets.return_value = pd.DataFrame(columns=['name', 'asset_id', 'yahoo_ticker', 'yahoo_fx_ticker', 'instrument'])
-    mock_instance.get_portfolio_transactions.return_value = pd.DataFrame(columns=['event_type', 'asset_id', 'owner_id', 'name', 'date', 'quantity', 'price_fx', 'price_eur', 'amount'])
+    mock_instance.get_active_assets.return_value = pd.DataFrame(
+        columns=['name', 'asset_id', 'yahoo_ticker', 'total_quantity'])
+    mock_instance.get_portfolio_transactions.return_value = pd.DataFrame(
+        columns=['event_type', 'asset_id', 'owner_id', 'name', 'date', 
+                'quantity', 'price_fx', 'price_eur', 'amount'])
     mock_db.return_value.__enter__.return_value = mock_instance
 
     # Execute test
