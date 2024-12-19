@@ -50,7 +50,7 @@ class PortfolioAnalyzer:
         """Fetch asset and transaction data from database."""
         # print("[FETCH_PORTFOLIO_DATA] Fetching portfolio data from database...")
         with PostgresConnector() as db:
-            self.assets_df = db.get_portfolio_assets(self.owner_id)
+            self.assets_df = db.get_active_assets(self.owner_id)
             # Add date filter to transactions query
             self.transactions_df = db.get_portfolio_transactions(self.owner_id)
             
