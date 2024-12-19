@@ -3,7 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ${IMAGE_NAME:-asset-management}:${TAG:-latest}${ENV:-}
+    image: analytics/risk-management-tool:${TAG:-latest}
+    container_name: risk-management-tool-${ENV:-dev}
     env_file:
       - .env.${DB_PARAM:-test}
     environment:
