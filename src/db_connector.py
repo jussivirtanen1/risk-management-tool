@@ -259,7 +259,6 @@ class PostgresConnector:
             JOIN {self.schema}.asset_ids id ON cp.asset_id = id.asset_id
             WHERE id.yahoo_ticker IS NOT NULL 
             AND id.yahoo_ticker != ''
-            AND id.yahoo_ticker NOT LIKE '%.%'  -- Exclude tickers with dots
             ORDER BY id.asset_id;  -- Add ordering for easier comparison
         """
         
