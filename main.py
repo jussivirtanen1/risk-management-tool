@@ -65,8 +65,6 @@ def create_moving_average_plots(owner_id: int, start_date: str, ma_periods: List
         print("No active assets found")
         return
     
-    print(f"Found {len(active_assets)} active assets")
-    
     # Create plots for each active asset
     for _, asset in active_assets.iterrows():
         ticker = asset['yahoo_ticker']

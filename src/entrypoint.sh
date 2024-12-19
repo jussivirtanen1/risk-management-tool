@@ -19,16 +19,5 @@ fi
 # Remove any leading underscore if present
 DB_PARAM=${DB_PARAM#_}
 
-# Validate required environment variables
-if [ -z "$DB_USER" ]; then
-    echo "Error: DB_USER must be set"
-    exit 1
-fi
-
-if [ -z "$DB_PASSWORD" ]; then
-    echo "Error: DB_PASSWORD must be set"
-    exit 1
-fi
-
 echo "Starting application with environment: $DB_PARAM"
 exec python main.py

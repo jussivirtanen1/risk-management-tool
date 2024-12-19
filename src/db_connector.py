@@ -262,14 +262,10 @@ class PostgresConnector:
             ORDER BY id.asset_id;  -- Add ordering for easier comparison
         """
         
-        # Debug print
-        print("\nExecuting query:")
-        print(query)
-        
         result = self.fetch_data(query)
         
         if result is not None:
-            print(f"\nFound {len(result)} assets:")
+            print(f"Found {len(result)} active assets")
             print(result[['name', 'asset_id', 'yahoo_ticker', 'total_quantity']])
         
         return result
