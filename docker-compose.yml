@@ -3,8 +3,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    command: app
     image: ${IMAGE_NAME:-analytics/risk-management-tool}:${TAG:-latest}
-    container_name: risk-management-tool-${ENV:-dev}
+    container_name: risk-management-tool-${ENV:-test}
     env_file:
       - .env.${DB_PARAM:-test}
     environment:
@@ -24,6 +25,22 @@ services:
       - app-network
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+  test:
+    build: .
+    command: test
+    image: ${IMAGE_NAME:-analytics/risk-management-tool}:${TAG:-latest}
+    env_file:
+      - .env.${DB_PARAM:-test}
+    environment:
+      DB_HOST: host.docker.internal
+      # Required inputs
+      DB_PARAM:
+      DB_USER:
+      DB_PASSWORD:
+      # Automatically configured
+      DB_NAME: am_db_${DB_PARAM}
+      DB_SCHEMA: asset_management_${DB_PARAM}
 
 networks:
   app-network:
