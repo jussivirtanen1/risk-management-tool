@@ -39,12 +39,12 @@ class PortfolioAnalyzer:
         self.name_ticker_map = {}  # Mapping from asset name to Yahoo ticker
 
     @staticmethod
-    def get_analysis_path() -> str:
-        """Get the path to analysis directory."""
-        if os.path.exists('/.dockerenv'):
-            return '/app/analysis'
-        else:
-            return str(Path.home() / "Desktop" / "analysis")
+    def get_analysis_path(owner_id: int) -> str:
+        """Get the path to analysis directory for specific owner."""
+        base_path = '/app/analysis' if os.path.exists('/.dockerenv') else str(Path.home() / "Desktop" / "analysis")
+        owner_path = os.path.join(base_path, f"owner_{owner_id}")
+        os.makedirs(owner_path, exist_ok=True)
+        return owner_path
 
     def fetch_portfolio_data(self) -> None:
         """Fetch asset and transaction data from database."""
@@ -315,11 +315,10 @@ class PortfolioAnalyzer:
         
         # print("[EXPORT_TO_ODS] Data rows added.")
         
-        # Define filename and path
+        # Define filename and path with owner_id
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"portfolio_proportions_{timestamp}.ods"
-        output_path = self.get_analysis_path()
-        os.makedirs(output_path, exist_ok=True)
+        output_path = self.get_analysis_path(self.owner_id)  # Pass owner_id
         full_path = os.path.join(output_path, filename)
         
         # Save the document
@@ -366,16 +365,29 @@ class PortfolioAnalyzer:
         except Exception as e:
             raise ValueError(f"Error during portfolio analysis: {e}")
 
-def main(owner_id: int = 10, start_date: str = "2023-01-01") -> Optional[pd.DataFrame]:
+def main(start_date: str = "2023-01-01") -> dict:
     """
-    Main function to run portfolio analysis.
+    Main function to run portfolio analysis for multiple owners.
     
     Args:
-        owner_id: ID of the portfolio owner
         start_date: Start date for analysis
         
     Returns:
-        DataFrame with portfolio proportions or None if analysis fails
+        dict: Dictionary of owner_id: analysis_results pairs
     """
-    analyzer = PortfolioAnalyzer(owner_id, start_date)
-    return analyzer.analyze()
+    owner_ids = [10, 20, 30]
+    results = {}
+    
+    for owner_id in owner_ids:
+        print(f"\nAnalyzing portfolio for owner {owner_id}")
+        try:
+            analyzer = PortfolioAnalyzer(owner_id, start_date)
+            results[owner_id] = analyzer.analyze()
+        except Exception as e:
+            print(f"Error analyzing portfolio for owner {owner_id}: {e}")
+            results[owner_id] = None
+    
+    return results
+
+if __name__ == "__main__":
+    main()

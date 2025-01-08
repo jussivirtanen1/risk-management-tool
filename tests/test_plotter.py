@@ -11,6 +11,23 @@ import os
 import shutil
 from src.plotter import MovingAveragePlotter
 from main import create_moving_average_plots, get_output_path
+import pytest
+from datetime import datetime, timedelta
+
+@pytest.fixture
+def sample_stock_data():
+    """Create sample stock data for testing."""
+    dates = pd.date_range(start='2023-01-01', periods=100, freq='D')
+    data = pd.DataFrame({
+        'Close': range(100),
+        'Date': dates
+    }).set_index('Date')
+    return data
+
+@pytest.fixture
+def plotter(sample_stock_data):
+    """Create a MovingAveragePlotter instance for testing."""
+    return MovingAveragePlotter(sample_stock_data, "Test Stock")
 
 class TestMovingAveragePlotter(unittest.TestCase):
     def setUp(self):
@@ -52,13 +69,13 @@ class TestMovingAveragePlotter(unittest.TestCase):
 
     def test_plot_creation(self):
         """Test creation of moving average plot."""
-        periods = [20, 50]
-        output_path = self.plotter.plot(periods, self.test_output_dir)
-        
-        # Verify plot file was created
-        self.assertIsNotNone(output_path)
-        self.assertTrue(os.path.exists(output_path))
-        self.assertTrue(output_path.endswith('.pdf'))
+        with patch('matplotlib.pyplot.savefig') as mock_savefig:
+            periods = [20, 50]
+            output_path = self.plotter.plot(periods, 10)  # Use owner_id 10
+            
+            # Verify plot was attempted to be saved
+            assert mock_savefig.called
+            assert output_path is not None
 
     def test_invalid_periods(self):
         """Test handling of invalid moving average periods."""
@@ -70,6 +87,20 @@ class TestMovingAveragePlotter(unittest.TestCase):
         long_period = len(self.sample_data) + 100
         self.plotter.calculate_ma([long_period])
         self.assertTrue(self.plotter.data[f'MA{long_period}'].isna().all())
+
+    def test_get_plots_path(self):
+        """Test plot path creation for multiple owners."""
+        test_owner_ids = [10, 20, 30]  # Define test_owner_ids here
+        for owner_id in test_owner_ids:
+            path = self.plotter.get_plots_path(owner_id)
+            self.assertTrue(f"owner_{owner_id}" in path)
+            self.assertTrue(os.path.exists(path))
+
+    def test_plot_error_handling(self):
+        """Test error handling in plot creation."""
+        with patch('matplotlib.pyplot.savefig', side_effect=Exception("Test error")):
+            result = self.plotter.plot([20, 50], 10)
+            assert result is None
 
 class TestPlottingFunctionality(unittest.TestCase):
     def setUp(self):

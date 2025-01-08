@@ -3,50 +3,76 @@ import pandas as pd
 import os
 from typing import List, Optional
 from matplotlib.backends.backend_pdf import PdfPages
+from pathlib import Path
+from datetime import datetime
 
 class MovingAveragePlotter:
-    def __init__(self, data: pd.DataFrame, symbol: str):
+    def __init__(self, data: pd.DataFrame, asset_name: str):
+        """
+        Initialize the Moving Average Plotter.
+        
+        Args:
+            data: DataFrame with stock price data
+            asset_name: Name of the asset
+        """
         self.data = data
-        self.symbol = symbol
+        self.asset_name = asset_name
         
     def calculate_ma(self, periods: List[int]) -> None:
         """Calculate moving averages for specified periods."""
         for period in periods:
             self.data[f'MA{period}'] = self.data['Close'].rolling(window=period).mean()
-    
-    def plot(self, periods: List[int], save_path: str) -> Optional[str]:
+
+    @staticmethod
+    def get_plots_path(owner_id: int) -> str:
+        """Get the path to plots directory for specific owner."""
+        if os.path.exists('/.dockerenv'):
+            base_path = '/app/stock_plots'
+        else:
+            base_path = str(Path.home() / "Desktop" / "stock_plots")
+        
+        owner_path = os.path.join(base_path, f"owner_{owner_id}")
+        os.makedirs(owner_path, exist_ok=True)
+        return owner_path
+
+    def plot(self, ma_periods: List[int], owner_id: int) -> Optional[str]:
         """
-        Create and save moving average plot as PDF.
+        Create and save the plot.
         
         Args:
-            periods (List[int]): List of periods for moving averages
-            save_path (str): Directory to save the plot
+            ma_periods: List of periods for moving averages
+            owner_id: ID of the portfolio owner
             
         Returns:
-            str: Path to saved plot or None if failed
+            Optional[str]: Path to saved plot or None if plotting fails
         """
         try:
-            self.calculate_ma(periods)
+            # Calculate moving averages
+            self.calculate_ma(ma_periods)
             
+            # Create plot
             plt.figure(figsize=(12, 6))
             plt.plot(self.data.index, self.data['Close'], label='Close Price')
             
-            for period in periods:
+            for period in ma_periods:
                 plt.plot(self.data.index, self.data[f'MA{period}'], 
                         label=f'{period}-day MA')
             
-            plt.title(f'{self.symbol} Stock Price with Moving Averages')
+            plt.title(f'{self.asset_name} Stock Price with Moving Averages')
             plt.xlabel('Date')
             plt.ylabel('Price')
             plt.legend()
             plt.grid(True)
             
-            os.makedirs(save_path, exist_ok=True)
-            file_path = os.path.join(save_path, f'{self.symbol}_moving_averages.pdf')
-            plt.savefig(file_path, format='pdf', bbox_inches='tight')
+            # Save plot to owner-specific directory
+            output_path = self.get_plots_path(owner_id)
+            filename = f"{self.asset_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.png"
+            plot_path = os.path.join(output_path, filename)
+            plt.savefig(plot_path)
             plt.close()
             
-            return file_path
+            return plot_path
+            
         except Exception as e:
-            print(f"Error creating plot for {self.symbol}: {e}")
+            print(f"Error creating plot for {self.asset_name}: {e}")
             return None

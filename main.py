@@ -12,17 +12,23 @@ from src.portfolio_analyzer import PortfolioAnalyzer
 from src.plotter import MovingAveragePlotter
 from src.db_connector import PostgresConnector
 
-def get_output_path(folder: str = "analysis") -> str:
+def get_output_path(folder: str = "analysis", owner_id: int = None) -> str:
     """
     Get the path for output files.
     
     Args:
         folder: Name of the output folder
+        owner_id: ID of the portfolio owner
     """
     if os.path.exists('/.dockerenv'):
-        return f'/app/{folder}'
+        base_path = f'/app/{folder}'
     else:
-        return str(Path.home() / "Desktop" / folder)
+        base_path = str(Path.home() / "Desktop" / folder)
+    
+    if owner_id is not None:
+        base_path = os.path.join(base_path, f"owner_{owner_id}")
+        
+    return base_path
 
 def fetch_stock_data(ticker: str, start_date: str) -> Optional[pd.DataFrame]:
     """
@@ -54,7 +60,7 @@ def create_moving_average_plots(owner_id: int, start_date: str, ma_periods: List
         start_date: Start date for analysis
         ma_periods: List of periods for moving averages
     """
-    output_path = get_output_path("stock_plots")
+    output_path = get_output_path("stock_plots", owner_id)
     os.makedirs(output_path, exist_ok=True)
     
     # Get active assets
@@ -78,39 +84,43 @@ def create_moving_average_plots(owner_id: int, start_date: str, ma_periods: List
         
         # Create and save plot
         plotter = MovingAveragePlotter(stock_data, name)
-        plot_path = plotter.plot(ma_periods, output_path)
+        plot_path = plotter.plot(ma_periods, owner_id)
         
         if plot_path:
             print(f"Created plot for {name}: {plot_path}")
         else:
             print(f"Failed to create plot for {name}")
 
-def main(owner_id: int = 10, start_date: str = "2023-01-01", ma_periods: List[int] = [20, 50, 200]) -> None:
+def main(start_date: str = "2023-01-01", ma_periods: List[int] = [20, 50, 200]) -> None:
     """
-    Main function to run portfolio analysis and create plots.
+    Main function to run portfolio analysis and create plots for multiple owners.
     
     Args:
-        owner_id: ID of the portfolio owner
         start_date: Start date for analysis
         ma_periods: List of periods for moving averages
     """
-    try:
-        # Run portfolio analysis
-        print("\n=== Running Portfolio Analysis ===")
-        analyzer = PortfolioAnalyzer(owner_id, start_date)
-        portfolio_data = analyzer.analyze()
-        
-        if portfolio_data is not None:
-            print("Portfolio analysis completed successfully")
-        else:
-            print("Portfolio analysis failed")
-        
-        # Create moving average plots
-        print("\n=== Creating Moving Average Plots ===")
-        create_moving_average_plots(owner_id, start_date, ma_periods)
-        
-    except Exception as e:
-        print(f"Error in main execution: {e}")
+    owner_ids = [10, 20, 30]
+    
+    for owner_id in owner_ids:
+        print(f"\n=== Processing Owner ID: {owner_id} ===")
+        try:
+            # Run portfolio analysis
+            print("\n=== Running Portfolio Analysis ===")
+            analyzer = PortfolioAnalyzer(owner_id, start_date)
+            portfolio_data = analyzer.analyze()
+            
+            if portfolio_data is not None:
+                print("Portfolio analysis completed successfully")
+            else:
+                print("Portfolio analysis failed")
+            
+            # Create moving average plots
+            print("\n=== Creating Moving Average Plots ===")
+            create_moving_average_plots(owner_id, start_date, ma_periods)
+            
+        except Exception as e:
+            print(f"Error processing owner {owner_id}: {e}")
+            continue
 
 if __name__ == "__main__":
     main() 

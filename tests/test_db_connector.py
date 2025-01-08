@@ -227,3 +227,71 @@ def test_connection_parameter_override():
     db = PostgresConnector(dbname='override_db', user='override_user')
     assert db.config['dbname'] == 'override_db'
     assert db.config['user'] == 'override_user'
+
+def test_get_active_assets_multiple_owners(test_owner_ids):
+    """Test getting active assets for multiple owners."""
+    with patch('psycopg2.connect') as mock_connect:
+        # Mock cursor and connection
+        mock_cur = MagicMock()
+        mock_conn = MagicMock()
+        mock_connect.return_value = mock_conn
+        mock_conn.cursor.return_value = mock_cur
+        
+        for owner_id in test_owner_ids:
+            # Mock return data for each owner
+            mock_cur.fetchall.return_value = [
+                (f'Asset 1 Owner {owner_id}', 1, 'TEST1', 100),
+                (f'Asset 2 Owner {owner_id}', 2, 'TEST2', 50)
+            ]
+            mock_cur.description = [
+                ('name', None, None, None, None, None, None),
+                ('asset_id', None, None, None, None, None, None),
+                ('yahoo_ticker', None, None, None, None, None, None),
+                ('total_quantity', None, None, None, None, None, None)
+            ]
+            
+            with PostgresConnector() as db:
+                result = db.get_active_assets(owner_id)
+                
+                assert result is not None
+                assert len(result) == 2
+                assert 'name' in result.columns
+                assert 'asset_id' in result.columns
+                assert 'yahoo_ticker' in result.columns
+                assert 'total_quantity' in result.columns
+
+def test_get_portfolio_transactions_multiple_owners(test_owner_ids):
+    """Test getting portfolio transactions for multiple owners."""
+    with patch('psycopg2.connect') as mock_connect:
+        mock_cur = MagicMock()
+        mock_conn = MagicMock()
+        mock_connect.return_value = mock_conn
+        mock_conn.cursor.return_value = mock_cur
+        
+        for owner_id in test_owner_ids:
+            # Mock return data
+            mock_cur.fetchall.return_value = [
+                ('BUY', 1, owner_id, f'Asset 1 Owner {owner_id}', '2023-01-01', 100, 10.0, 10.0, 1000.0),
+                ('SELL', 2, owner_id, f'Asset 2 Owner {owner_id}', '2023-02-01', -50, 20.0, 20.0, -1000.0)
+            ]
+            mock_cur.description = [
+                ('event_type', None, None, None, None, None, None),
+                ('asset_id', None, None, None, None, None, None),
+                ('owner_id', None, None, None, None, None, None),
+                ('name', None, None, None, None, None, None),
+                ('date', None, None, None, None, None, None),
+                ('quantity', None, None, None, None, None, None),
+                ('price_fx', None, None, None, None, None, None),
+                ('price_eur', None, None, None, None, None, None),
+                ('amount', None, None, None, None, None, None)
+            ]
+            
+            with PostgresConnector() as db:
+                result = db.get_portfolio_transactions(owner_id)
+                
+                assert result is not None
+                assert len(result) == 2
+                assert all(col in result.columns for col in [
+                    'event_type', 'asset_id', 'owner_id', 'name', 'date',
+                    'quantity', 'price_fx', 'price_eur', 'amount'
+                ])
