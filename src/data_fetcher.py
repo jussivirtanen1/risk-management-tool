@@ -43,10 +43,17 @@ class StockDataFetcher:
         """
         Fetch end-of-month prices for all assets and convert to EUR if needed.
         """
+        print(f"[fetch_monthly_prices] Starting price fetch for owner {owner_id}")
+        
         # Get active assets with their currency information
         assets = self.db.get_active_assets(owner_id)
         if assets is None or assets.empty:
+            print(f"[fetch_monthly_prices] No active assets found for owner {owner_id}")
             return pd.DataFrame()
+
+        print(f"[fetch_monthly_prices] Found {len(assets)} active assets for owner {owner_id}:")
+        for _, asset in assets.iterrows():
+            print(f"[fetch_monthly_prices]   - {asset['name']} ({asset['yahoo_ticker']}) - Quantity: {asset['total_quantity']}")
 
         all_prices = []
         
@@ -56,32 +63,65 @@ class StockDataFetcher:
             
             try:
                 # Fetch price data
-                price_data = yf.download(ticker, start=start_date)
+                print(f"\n[fetch_monthly_prices] Fetching data for {asset['name']} ({ticker})")
+                try:
+                    print(f"[fetch_monthly_prices] Attempting to fetch from {start_date}")
+                    price_data = yf.download(ticker, start=start_date)
+                    print(f"[fetch_monthly_prices] Received data shape: {price_data.shape}")
+                except Exception as e:
+                    if "YFInvalidPeriodError" in str(e):
+                        print(f"[fetch_monthly_prices] YFInvalidPeriodError for {ticker}, trying with more recent date")
+                        recent_start = pd.Timestamp.now() - pd.DateOffset(months=6)
+                        recent_start_str = recent_start.strftime('%Y-%m-%d')
+                        print(f"[fetch_monthly_prices] Retrying from {recent_start_str}")
+                        price_data = yf.download(ticker, start=recent_start_str)
+                        print(f"[fetch_monthly_prices] Received data shape after retry: {price_data.shape}")
+                    else:
+                        print(f"[fetch_monthly_prices] Unexpected error for {ticker}: {str(e)}")
+                        raise e
+
                 if price_data.empty:
-                    print(f"No data found for {ticker}")
+                    print(f"[fetch_monthly_prices] No data found for {ticker}")
                     continue
 
+                print(f"\n[fetch_monthly_prices] Price data for {asset['name']} ({ticker}):")
+                print(price_data.tail())
+
                 # Resample to end of month
+                print(f"[fetch_monthly_prices] Resampling data to monthly for {ticker}")
                 monthly_data = price_data['Close'].resample('ME').last()
+                print(f"[fetch_monthly_prices] Got {len(monthly_data)} monthly data points")
                 
                 # Convert to EUR if needed
                 if fx_ticker:
+                    print(f"\n[fetch_monthly_prices] Converting {ticker} prices from {fx_ticker} to EUR")
                     for date, price in monthly_data.items():
+                        print(f"[fetch_monthly_prices] Getting FX rate for {date.strftime('%Y-%m-%d')}")
                         fx_rate = self._get_fx_rate(fx_ticker, date.strftime('%Y-%m-%d'))
                         if fx_rate is not None:
                             monthly_data[date] = price * fx_rate
+                            print(f"[fetch_monthly_prices]   {date.strftime('%Y-%m-%d')}: {price:.2f} -> {monthly_data[date]:.2f} EUR (rate: {fx_rate:.4f})")
+                        else:
+                            print(f"[fetch_monthly_prices] Failed to get FX rate for {date.strftime('%Y-%m-%d')}")
                 
                 # Create price records
+                print(f"[fetch_monthly_prices] Creating price records for {ticker}")
+                records_added = 0
                 for date, price in monthly_data.items():
                     all_prices.append({
                         'asset_id': asset['asset_id'],
                         'date': date,
                         'price': price,
-                        'currency': 'EUR'  # Now all prices are in EUR
+                        'currency': 'EUR'
                     })
+                    records_added += 1
+                print(f"[fetch_monthly_prices] Added {records_added} price records for {ticker}")
                     
             except Exception as e:
-                print(f"Error processing {ticker}: {e}")
+                print(f"[fetch_monthly_prices] Error processing {ticker}: {str(e)}")
+                print(f"[fetch_monthly_prices] Full error details: {repr(e)}")
                 continue
 
-        return pd.DataFrame(all_prices)
+        result_df = pd.DataFrame(all_prices)
+        print(f"[fetch_monthly_prices] Completed processing for owner {owner_id}. Total records: {len(result_df)}")
+        return result_df

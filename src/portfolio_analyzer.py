@@ -15,6 +15,12 @@ from odf.opendocument import OpenDocumentSpreadsheet
 from odf.table import Table, TableRow, TableCell
 from src.db_connector import PostgresConnector
 
+# Set pandas display options for better debugging
+pd.set_option('display.max_columns', None)  # Show all columns
+pd.set_option('display.max_rows', None)     # Show all rows
+pd.set_option('display.width', None)        # Don't wrap wide DataFrames
+pd.set_option('display.max_colwidth', None) # Don't truncate cell contents
+
 class PortfolioAnalyzer:
     def __init__(self, owner_id: int, start_date: str = "2023-01-01"):
         """
@@ -48,39 +54,45 @@ class PortfolioAnalyzer:
 
     def fetch_portfolio_data(self) -> None:
         """Fetch asset and transaction data from database."""
-        # print("[FETCH_PORTFOLIO_DATA] Fetching portfolio data from database...")
+        print("\n[FETCH_PORTFOLIO_DATA] Fetching portfolio data from database...")
         with PostgresConnector() as db:
             self.assets_df = db.get_active_assets(self.owner_id)
-            # Add date filter to transactions query
             self.transactions_df = db.get_portfolio_transactions(self.owner_id)
             
+            print("\n[FETCH_PORTFOLIO_DATA] Assets DataFrame:")
+            print(f"Columns: {self.assets_df.columns.tolist()}")
+            print(f"Shape: {self.assets_df.shape}")
+            print("Data:")
+            print(self.assets_df)
+            
+            print("\n[FETCH_PORTFOLIO_DATA] Transactions DataFrame:")
+            print(f"Columns: {self.transactions_df.columns.tolist()}")
+            print(f"Shape: {self.transactions_df.shape}")
+            print("Data:")
+            print(self.transactions_df)
+            
             if self.transactions_df is not None:
-                # Convert date column to datetime
                 self.transactions_df['date'] = pd.to_datetime(self.transactions_df['date'])
-                # Filter transactions based on start_date
                 self.transactions_df = self.transactions_df[self.transactions_df['date'] >= self.start_date]
-                # if self.transactions_df.empty:
-                #     print(f"[FETCH_PORTFOLIO_DATA] No transactions found after {self.start_date}")
+                print("\n[FETCH_PORTFOLIO_DATA] Filtered Transactions:")
+                print(f"Date range: {self.transactions_df['date'].min()} to {self.transactions_df['date'].max()}")
+                print(f"Number of transactions: {len(self.transactions_df)}")
         
         if self.assets_df is None or self.transactions_df is None:
             raise ValueError("Failed to fetch portfolio data from database")
-        
-        # print(f"[FETCH_PORTFOLIO_DATA] Assets DataFrame shape: {self.assets_df.shape}")
-        # print(f"[FETCH_PORTFOLIO_DATA] Transactions DataFrame shape: {self.transactions_df.shape}")
-        # print(f"[FETCH_PORTFOLIO_DATA] Transaction date range: {self.transactions_df['date'].min()} to {self.transactions_df['date'].max()}")
-        # print(f"[FETCH_PORTFOLIO_DATA] Assets DataFrame head:\n{self.assets_df.head()}")
-        # print(f"[FETCH_PORTFOLIO_DATA] Transactions DataFrame head:\n{self.transactions_df.head()}")
 
         # Create a mapping from asset name to Yahoo ticker
         self.name_ticker_map = pd.Series(
             self.assets_df.yahoo_ticker.values,
             index=self.assets_df.name
         ).to_dict()
-        # print(f"[FETCH_PORTFOLIO_DATA] Asset Name to Ticker Mapping:\n{self.name_ticker_map}")
+        print(f"\n[FETCH_PORTFOLIO_DATA] Asset Name to Ticker Mapping:")
+        for name, ticker in self.name_ticker_map.items():
+            print(f"  {name}: {ticker}")
 
     def fetch_market_data(self) -> None:
         """Fetch market data from Yahoo Finance."""
-        # print("[FETCH_MARKET_DATA] Fetching market data from Yahoo Finance...")
+        print("[FETCH_MARKET_DATA] Starting market data fetch...")
         if self.assets_df is None:
             raise ValueError("Must fetch portfolio data before market data")
         
@@ -88,7 +100,7 @@ class PortfolioAnalyzer:
         tickers = list(self.name_ticker_map.values())
         # Remove any NaN or None tickers
         tickers = [ticker for ticker in tickers if isinstance(ticker, str) and ticker.strip() != '']
-        # print(f"[FETCH_MARKET_DATA] Tickers to fetch: {tickers}")
+        print(f"[FETCH_MARKET_DATA] Attempting to fetch data for tickers: {tickers}")
         
         if not tickers:
             raise ValueError("No valid tickers found to fetch market data")
@@ -96,97 +108,129 @@ class PortfolioAnalyzer:
         try:
             # Add some buffer days to ensure we have enough data
             start_date = self.start_date - pd.Timedelta(days=10)
+            print(f"[FETCH_MARKET_DATA] Fetching from date: {start_date}")
             self.price_data = yf.download(tickers, start=start_date)['Close']
+            print(f"[FETCH_MARKET_DATA] Raw price data shape: {self.price_data.shape}")
+            print(f"[FETCH_MARKET_DATA] Raw price data columns: {self.price_data.columns.tolist()}")
+            
+            # Check for columns that are all NaN
+            nan_columns = self.price_data.columns[self.price_data.isna().all()]
+            if not nan_columns.empty:
+                print(f"[FETCH_MARKET_DATA] Found columns with all NaN values: {nan_columns.tolist()}")
+                print("[FETCH_MARKET_DATA] Removing these columns from analysis")
+                self.price_data = self.price_data.drop(columns=nan_columns)
+                
+                # Also remove these from name_ticker_map
+                ticker_to_name = {v: k for k, v in self.name_ticker_map.items()}
+                for ticker in nan_columns:
+                    if ticker in ticker_to_name:
+                        asset_name = ticker_to_name[ticker]
+                        del self.name_ticker_map[asset_name]
+                        print(f"[FETCH_MARKET_DATA] Removed {asset_name} ({ticker}) from analysis due to missing data")
+
+            print(f"[FETCH_MARKET_DATA] After removing NaN columns - shape: {self.price_data.shape}")
+            print(f"[FETCH_MARKET_DATA] Remaining columns: {self.price_data.columns.tolist()}")
+            print(f"[FETCH_MARKET_DATA] Raw price data index: {self.price_data.index.min()} to {self.price_data.index.max()}")
+            
             if self.price_data.empty:
-                raise ValueError("No price data returned from Yahoo Finance")
+                raise ValueError("No valid price data remained after removing NaN columns")
                 
             self.price_data = self.price_data.ffill()  # Forward fill missing values
-            # print(f"[FETCH_MARKET_DATA] Price data fetched with shape: {self.price_data.shape}")
-            # print(f"[FETCH_MARKET_DATA] Price data date range: {self.price_data.index.min()} to {self.price_data.index.max()}")
-            # print(f"[FETCH_MARKET_DATA] Price data head:\n{self.price_data.head()}")
             
             # Rename price_data columns from tickers to asset names
             ticker_to_name = {v: k for k, v in self.name_ticker_map.items()}
+            print(f"[FETCH_MARKET_DATA] Ticker to name mapping after cleanup: {ticker_to_name}")
             self.price_data.rename(columns=ticker_to_name, inplace=True)
-            # print(f"[FETCH_MARKET_DATA] Price data columns renamed to asset names:\n{self.price_data.columns.tolist()}")
+            print(f"[FETCH_MARKET_DATA] Final price data columns: {self.price_data.columns.tolist()}")
             
         except Exception as e:
-            # print(f"[FETCH_MARKET_DATA ERROR] Failed to fetch price data: {e}")
+            print(f"[FETCH_MARKET_DATA ERROR] Failed to fetch price data: {str(e)}")
+            print(f"[FETCH_MARKET_DATA ERROR] Full error details: {repr(e)}")
             raise ValueError(f"Failed to fetch price data: {e}")
 
     def calculate_monthly_positions(self) -> Tuple[List[pd.Timestamp], pd.DataFrame]:
-        """
-        Calculate monthly positions considering transaction timing.
-        
-        Returns:
-            Tuple of (monthly_dates, positions_df)
-        """
-        # print("[CALCULATE_MONTHLY_POSITIONS] Calculating monthly positions...")
+        """Calculate monthly positions considering transaction timing."""
+        print("\n[CALCULATE_MONTHLY_POSITIONS] Starting monthly positions calculation...")
         if self.transactions_df is None or self.price_data is None:
             raise ValueError("Must fetch both transaction and market data first")
 
-        # Merge transactions with asset data to get asset names
+        # Merge transactions with asset data
         merged_df = self.transactions_df.merge(
             self.assets_df[['asset_id', 'name', 'yahoo_ticker']],
             on='asset_id',
             how='left',
             suffixes=('_trans', '_asset')
         )
-        # print("[CALCULATE_MONTHLY_POSITIONS] Merged DataFrame columns:")
-        # print(merged_df.columns.tolist())
-
-        # if merged_df['name_asset'].isnull().any():
-        #     print("[CALCULATE_MONTHLY_POSITIONS WARNING] Some transactions have missing asset names.")
-
-        # Ensure all dates are in pandas datetime format
-        merged_df['date'] = pd.to_datetime(merged_df['date'])
-        self.price_data.index = pd.to_datetime(self.price_data.index)
-        # print("[CALCULATE_MONTHLY_POSITIONS] Converted transaction and price data dates to datetime.")
-
+        
+        print("\n[CALCULATE_MONTHLY_POSITIONS] Transaction types in data:")
+        print(merged_df['event_type'].value_counts())
+        
         # Group by month end ('ME') frequency
         monthly_last_dates = self.price_data.groupby(pd.Grouper(freq='ME')).last()
         valid_dates = monthly_last_dates[~monthly_last_dates.isnull().any(axis=1)].index
-        # print(f"[CALCULATE_MONTHLY_POSITIONS] Number of valid month-end dates: {len(valid_dates)}")
-
-        # Initialize a dictionary to hold date: positions
+        
+        # Initialize positions dictionary
         positions_dict = {}
         
         for monthly_date in valid_dates:
-            # Keep monthly_date as pandas Timestamp
+            print(f"\n[CALCULATE_MONTHLY_POSITIONS] Processing date: {monthly_date}")
             valid_transactions = merged_df[merged_df['date'] <= monthly_date]
+            print(f"Number of valid transactions: {len(valid_transactions)}")
             
             if not valid_transactions.empty:
-                # Aggregate quantities by asset name (from assets_df)
+                # Calculate net positions by summing quantities
                 positions = valid_transactions.groupby('name_asset')['quantity'].sum()
+                print(f"Raw positions before validation:\n{positions}")
                 
-                # Filter out positions with zero quantity
+                # Validate positions
+                if (positions < 0).any():
+                    print("\n[CALCULATE_MONTHLY_POSITIONS] WARNING: Found negative positions!")
+                    print("Negative positions:")
+                    print(positions[positions < 0])
+                    
+                    # Option 1: Set negative positions to 0
+                    positions[positions < 0] = 0
+                    print("\nPositions after setting negatives to 0:")
+                    print(positions)
+                
+                # Filter out zero positions
                 positions = positions[positions != 0]
+                print(f"\nFinal positions for {monthly_date}:\n{positions}")
                 
                 if not positions.empty:
                     positions_dict[monthly_date] = positions
-                    # print(f"[CALCULATE_MONTHLY_POSITIONS] Added positions for date: {monthly_date.date()} | Positions: {positions.to_dict()}")
-                # else:
-                #     print(f"[CALCULATE_MONTHLY_POSITIONS] No non-zero positions for date: {monthly_date.date()}")
-            # else:
-            #     print(f"[CALCULATE_MONTHLY_POSITIONS] No transactions up to date: {monthly_date.date()}")
+                else:
+                    print("No non-zero positions found for this date")
+            else:
+                print("No valid transactions found for this date")
 
-        # Debugging: Print lengths
-        # print(f"[CALCULATE_MONTHLY_POSITIONS] Total valid_dates: {len(valid_dates)}")
-        # print(f"[CALCULATE_MONTHLY_POSITIONS] Total positions_dict entries: {len(positions_dict)}")
-
-        # Ensure that positions_dict is not empty
+        print(f"\n[CALCULATE_MONTHLY_POSITIONS] Final positions dictionary size: {len(positions_dict)}")
+        
         if not positions_dict:
             raise ValueError("No valid portfolio positions found for the given dates.")
 
-        # Create DataFrame from the dictionary
         try:
             positions_df = pd.DataFrame.from_dict(positions_dict, orient='index').fillna(0)
             positions_df.index.name = 'Date'
-            # print(f"[CALCULATE_MONTHLY_POSITIONS] Positions DataFrame shape: {positions_df.shape}")
-            # print(f"[CALCULATE_MONTHLY_POSITIONS] Positions DataFrame head:\n{positions_df.head()}")
+            
+            # Validate final positions DataFrame
+            if (positions_df < 0).any().any():
+                print("\n[CALCULATE_MONTHLY_POSITIONS] WARNING: Negative values in final positions DataFrame!")
+                print("Negative positions:")
+                print(positions_df[positions_df < 0].dropna(how='all'))
+                # Set any remaining negatives to 0
+                positions_df[positions_df < 0] = 0
+            
+            print(f"\n[CALCULATE_MONTHLY_POSITIONS] Final positions DataFrame:")
+            print(f"Shape: {positions_df.shape}")
+            print(f"Columns: {positions_df.columns.tolist()}")
+            print(f"Sample data:\n{positions_df}")
+            
             return list(positions_df.index), positions_df
+            
         except Exception as e:
-            # print(f"[CALCULATE_MONTHLY_POSITIONS ERROR] Failed to create positions DataFrame: {e}")
+            print(f"[CALCULATE_MONTHLY_POSITIONS ERROR] Failed to create positions DataFrame: {str(e)}")
+            print(f"[CALCULATE_MONTHLY_POSITIONS ERROR] Full error details: {repr(e)}")
             raise ValueError(f"Failed to create positions DataFrame: {e}")
 
     def calculate_portfolio_proportions(self, positions: pd.DataFrame) -> pd.DataFrame:
