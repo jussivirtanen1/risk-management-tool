@@ -136,13 +136,18 @@ class PortfolioAnalyzer:
         print("\n[CALCULATE_MONTHLY_POSITIONS] Transaction types in data:")
         print(merged_df['event_type'].value_counts())
         
+        # Sort transactions by date to ensure proper accumulation
+        merged_df = merged_df.sort_values('date')
+        print("\n[CALCULATE_MONTHLY_POSITIONS] Transactions after sorting:")
+        print(merged_df[['date', 'name_asset', 'quantity', 'event_type']])
+        
         # Group by month end ('ME') frequency
         monthly_last_dates = self.price_data.groupby(pd.Grouper(freq='ME')).last()
         valid_dates = monthly_last_dates[~monthly_last_dates.isnull().any(axis=1)].index
         
-        # Initialize positions dictionary and accumulation list
+        # Initialize positions dictionary and accumulation tracking
         positions_dict = {}
-        accumulation_list = []  # Changed from DataFrame to list
+        running_positions = {}  # Track running total for each asset
         
         for monthly_date in valid_dates:
             print(f"\n[CALCULATE_MONTHLY_POSITIONS] Processing date: {monthly_date}")
@@ -150,31 +155,24 @@ class PortfolioAnalyzer:
             print(f"Number of valid transactions: {len(valid_transactions)}")
             
             if not valid_transactions.empty:
-                # Calculate net positions by summing quantities
-                positions = valid_transactions.groupby('name_asset')['quantity'].sum()
+                # Calculate running positions by processing transactions chronologically
+                for _, transaction in valid_transactions.iterrows():
+                    asset_name = transaction['name_asset']
+                    quantity = transaction['quantity']
+                    
+                    # Initialize position if not exists
+                    if asset_name not in running_positions:
+                        running_positions[asset_name] = 0
+                    
+                    # Update running position
+                    running_positions[asset_name] += quantity
+                    
+                # Create positions Series from running positions
+                positions = pd.Series(running_positions)
                 
-                # Add to accumulation tracking
-                for asset_name, quantity in positions.items():
-                    accumulation_list.append({  # Append to list instead of DataFrame
-                        'date': monthly_date,
-                        'name': asset_name,
-                        'quantity': quantity,
-                    })
-                
-                # Create accumulation DataFrame from list
-                accumulation_df = pd.DataFrame(accumulation_list)
-                
-                print(f"\n[CALCULATE_MONTHLY_POSITIONS] Accumulated positions as of {monthly_date}:")
-                # Pivot the accumulation data for better visualization
-                if not accumulation_df.empty:
-                    pivot_table = accumulation_df.pivot_table(
-                        index='date',
-                        columns='name',
-                        values='quantity',
-                        aggfunc='last'
-                    ).fillna(0)
-                    print("\nAccumulated Quantities Over Time:")
-                    print(pivot_table)
+                print(f"\n[CALCULATE_MONTHLY_POSITIONS] Running positions as of {monthly_date}:")
+                for asset, qty in running_positions.items():
+                    print(f"  {asset}: {qty}")
                 
                 # Validate positions
                 if (positions < 0).any():
@@ -207,9 +205,8 @@ class PortfolioAnalyzer:
             positions_df = pd.DataFrame.from_dict(positions_dict, orient='index').fillna(0)
             positions_df.index.name = 'Date'
             
-            if 'pivot_table' in locals():
-                print("\n[CALCULATE_MONTHLY_POSITIONS] Complete accumulation table:")
-                print(pivot_table)
+            print("\n[CALCULATE_MONTHLY_POSITIONS] Complete positions DataFrame:")
+            print(positions_df)
             
             return list(positions_df.index), positions_df
             
@@ -221,60 +218,109 @@ class PortfolioAnalyzer:
     def calculate_portfolio_proportions(self, positions: pd.DataFrame) -> pd.DataFrame:
         """
         Calculate portfolio proportions over time.
-        
-        Args:
-            positions: DataFrame with asset positions
-            
-        Returns:
-            DataFrame with portfolio proportions
         """
-        # print("[CALCULATE_PORTFOLIO_PROPORTIONS] Calculating portfolio proportions...")
+        print("\n[CALCULATE_PORTFOLIO_PROPORTIONS] Starting proportion calculations...")
+        print("\nInput positions:")
+        print(positions)
         
-        # Ensure that the price_data contains all asset names present in positions
+        # Get the latest EUR prices from transactions for assets missing in price_data
         missing_assets = set(positions.columns) - set(self.price_data.columns)
         if missing_assets:
-            # print(f"[CALCULATE_PORTFOLIO_PROPORTIONS WARNING] Missing assets in price_data: {missing_assets}")
-            # Optionally, fetch missing asset prices or handle accordingly
-            # For simplicity, we'll add them with zero prices
+            print(f"\n[CALCULATE_PORTFOLIO_PROPORTIONS] Assets missing Yahoo data: {missing_assets}")
+            print("Using EUR prices from transactions for these assets...")
+            
             for asset in missing_assets:
-                self.price_data[asset] = 0.0
-            # print(f"[CALCULATE_PORTFOLIO_PROPORTIONS INFO] Added missing assets with zero prices: {missing_assets}")
+                try:
+                    # Get asset_id for the missing asset
+                    asset_matches = self.assets_df[self.assets_df['name'] == asset]
+                    if asset_matches.empty:
+                        print(f"WARNING: Asset {asset} not found in assets_df")
+                        continue
+                        
+                    asset_id = asset_matches['asset_id'].iloc[0]
+                    print(f"Found asset_id {asset_id} for {asset}")
+                    
+                    # Get all transactions for this asset with EUR prices
+                    asset_transactions = self.transactions_df[
+                        (self.transactions_df['asset_id'] == asset_id) &
+                        (self.transactions_df['price_eur'].notna())
+                    ]
+                    
+                    if asset_transactions.empty:
+                        print(f"WARNING: No transactions found for asset {asset} (id: {asset_id})")
+                        continue
+                        
+                    asset_transactions = asset_transactions.sort_values('date', ascending=False)
+                    
+                    # Get the latest EUR price
+                    latest_price = asset_transactions.iloc[0]['price_eur']
+                    latest_price_date = asset_transactions.iloc[0]['date']
+                    print(f"Using price {latest_price} EUR for {asset} (from {latest_price_date})")
+                    
+                    # Create a Series with this price for all dates in our date range
+                    if self.price_data.empty:
+                        # If price_data is empty, create it with monthly dates
+                        date_range = pd.date_range(
+                            start=self.start_date,
+                            end=pd.Timestamp.now(),
+                            freq='ME'
+                        )
+                        self.price_data = pd.DataFrame(index=date_range)
+                    
+                    # Fill the entire date range with this price
+                    self.price_data[asset] = latest_price
+                    print(f"Added constant price {latest_price} EUR for {asset} across all dates")
+                    
+                except Exception as e:
+                    print(f"ERROR processing asset {asset}: {str(e)}")
+                    print(f"Debug info:")
+                    print(f"Asset matches in assets_df:")
+                    print(self.assets_df[self.assets_df['name'] == asset])
+                    print(f"Transactions for asset:")
+                    print(asset_transactions if 'asset_transactions' in locals() else "No transactions queried yet")
+                    continue
         
-        # Reindex price_data to include all dates in positions.index
-        # This ensures that we have price data aligned with each position date
-        aligned_prices = self.price_data.reindex(index=positions.index, method='ffill').fillna(0)
+        print("\n[CALCULATE_PORTFOLIO_PROPORTIONS] Price data after adding missing assets:")
+        print(self.price_data)
         
-        # Reindex columns to match positions.columns
+        # Align prices with positions
+        aligned_prices = self.price_data.reindex(index=positions.index, method='ffill')
         aligned_prices = aligned_prices.reindex(columns=positions.columns, fill_value=0)
         
-        # print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Aligned_prices shape: {aligned_prices.shape}")
-        # print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Aligned_prices head:\n{aligned_prices.head()}")
+        print("\n[CALCULATE_PORTFOLIO_PROPORTIONS] Aligned prices:")
+        print(aligned_prices)
         
-        # Debug: Verify alignment
-        if not aligned_prices.index.equals(positions.index):
-            # print("[CALCULATE_PORTFOLIO_PROPORTIONS ERROR] Date indices of positions and aligned_prices do not match.")
-            raise ValueError("Date indices alignment mismatch between positions and price_data.")
+        # Verify no zero prices
+        zero_prices = aligned_prices.columns[aligned_prices.eq(0).any()]
+        if not zero_prices.empty:
+            print(f"\nWARNING: Found zero prices for assets: {list(zero_prices)}")
+            print("This might affect portfolio proportions!")
         
-        if not set(aligned_prices.columns) == set(positions.columns):
-            # print("[CALCULATE_PORTFOLIO_PROPORTIONS ERROR] Column names of positions and aligned_prices do not match.")
-            raise ValueError("Column names alignment mismatch between positions and price_data.")
-        
-        # Calculate portfolio values: Multiply positions by their respective prices
+        # Calculate portfolio values
         portfolio_values = positions * aligned_prices
-        # print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Portfolio values shape: {portfolio_values.shape}")
-        # print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Portfolio values head:\n{portfolio_values.head()}")
+        print("\n[CALCULATE_PORTFOLIO_PROPORTIONS] Portfolio values:")
+        print(portfolio_values)
         
         # Calculate total portfolio value per date
         total_values = portfolio_values.sum(axis=1).replace(0, pd.NA)
-        # print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Total portfolio values head:\n{total_values.head()}")
+        print("\n[CALCULATE_PORTFOLIO_PROPORTIONS] Total portfolio values:")
+        print(total_values)
         
         # Calculate proportions
-        proportions = portfolio_values.div(total_values, axis=0).multiply(100).fillna(0)
-        proportions = proportions.round(2)
+        proportions = portfolio_values.div(total_values, axis=0).multiply(100)
+        proportions = proportions.round(2).fillna(0)
         
-        # print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Portfolio proportions calculated with shape: {proportions.shape}")
-        # print(f"[CALCULATE_PORTFOLIO_PROPORTIONS] Proportions DataFrame head:\n{proportions.head()}")
-
+        # Verify proportions sum to approximately 100%
+        sum_proportions = proportions.sum(axis=1)
+        print("\n[CALCULATE_PORTFOLIO_PROPORTIONS] Sum of proportions per date:")
+        print(sum_proportions)
+        
+        if not all(sum_proportions.between(99, 101)):
+            print("\nWARNING: Some dates have proportions not summing to 100%!")
+        
+        print("\n[CALCULATE_PORTFOLIO_PROPORTIONS] Final proportions:")
+        print(proportions)
+        
         return proportions
 
     def export_to_ods(self, df: pd.DataFrame) -> str:
