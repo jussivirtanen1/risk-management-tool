@@ -42,16 +42,17 @@ def fetch_stock_data(ticker: str, start_date: str) -> Optional[pd.DataFrame]:
         Optional[pd.DataFrame]: Stock price data or None if fetch fails
     """
     try:
-        print(f"\nFetching data for {ticker}")
+        # print(f"\nFetching data for {ticker}")
         try:
             # First try with original start_date
-            data = yf.download(ticker, start=start_date)
+            end_date = pd.Timestamp.today().strftime('%Y-%m-%d')  # Set end date to today
+            data = yf.download(ticker, start=start_date, end=end_date)
         except Exception as e:
             if "YFInvalidPeriodError" in str(e):
                 print(f"Retrying {ticker} with more recent start date...")
                 # Try with a more recent start date (6 months ago)
                 recent_start = pd.Timestamp.now() - pd.DateOffset(months=6)
-                data = yf.download(ticker, start=recent_start.strftime('%Y-%m-%d'))
+                data = yf.download(ticker, start=recent_start.strftime('%Y-%m-%d'), end=end_date)
             else:
                 raise e
 
@@ -91,7 +92,7 @@ def create_moving_average_plots(owner_id: int, start_date: str, ma_periods: List
     for _, asset in active_assets.iterrows():
         ticker = asset['yahoo_ticker']
         name = asset['name']
-        print(f"\nProcessing {name} ({ticker})")
+        # print(f"\nProcessing {name} ({ticker})")
         
         # Fetch stock data
         stock_data = fetch_stock_data(ticker, start_date)
@@ -125,13 +126,13 @@ def main(start_date: str = "2023-01-01", ma_periods: List[int] = [20, 50, 200]) 
             
             if portfolio_data is not None:
                 print(f"[main] Portfolio analysis completed successfully for owner {owner_id}")
-                print(f"[main] Portfolio data shape: {portfolio_data.shape}")
+                # print(f"[main] Portfolio data shape: {portfolio_data.shape}")
             else:
                 print(f"[main] Portfolio analysis failed for owner {owner_id}")
             
             # Create moving average plots
-            # print(f"\n[main] === Creating Moving Average Plots for owner {owner_id} ===")
-            # create_moving_average_plots(owner_id, start_date, ma_periods)
+            print(f"\n[main] === Creating Moving Average Plots for owner {owner_id} ===")
+            create_moving_average_plots(owner_id, start_date, ma_periods)
             
         except Exception as e:
             print(f"[main] Error processing owner {owner_id}: {str(e)}")

@@ -52,8 +52,8 @@ class StockDataFetcher:
             return pd.DataFrame()
 
         print(f"[fetch_monthly_prices] Found {len(assets)} active assets for owner {owner_id}:")
-        for _, asset in assets.iterrows():
-            print(f"[fetch_monthly_prices]   - {asset['name']} ({asset['yahoo_ticker']}) - Quantity: {asset['total_quantity']}")
+        # for _, asset in assets.iterrows():
+        #     print(f"[fetch_monthly_prices]   - {asset['name']} ({asset['yahoo_ticker']}) - Quantity: {asset['total_quantity']}")
 
         all_prices = []
         
@@ -66,7 +66,8 @@ class StockDataFetcher:
                 print(f"\n[fetch_monthly_prices] Fetching data for {asset['name']} ({ticker})")
                 try:
                     print(f"[fetch_monthly_prices] Attempting to fetch from {start_date}")
-                    price_data = yf.download(ticker, start=start_date)
+                    end_date = pd.Timestamp.today().strftime('%Y-%m-%d')  # Set end date to today
+                    price_data = yf.download(ticker, start=start_date, end=end_date)
                     print(f"[fetch_monthly_prices] Received data shape: {price_data.shape}")
                 except Exception as e:
                     if "YFInvalidPeriodError" in str(e):
@@ -74,7 +75,7 @@ class StockDataFetcher:
                         recent_start = pd.Timestamp.now() - pd.DateOffset(months=6)
                         recent_start_str = recent_start.strftime('%Y-%m-%d')
                         print(f"[fetch_monthly_prices] Retrying from {recent_start_str}")
-                        price_data = yf.download(ticker, start=recent_start_str)
+                        price_data = yf.download(ticker, start=recent_start_str, end=end_date)
                         print(f"[fetch_monthly_prices] Received data shape after retry: {price_data.shape}")
                     else:
                         print(f"[fetch_monthly_prices] Unexpected error for {ticker}: {str(e)}")
@@ -84,11 +85,11 @@ class StockDataFetcher:
                     print(f"[fetch_monthly_prices] No data found for {ticker}")
                     continue
 
-                print(f"\n[fetch_monthly_prices] Price data for {asset['name']} ({ticker}):")
-                print(price_data.tail())
+                # print(f"\n[fetch_monthly_prices] Price data for {asset['name']} ({ticker}):")
+                # print(price_data.tail())
 
                 # Resample to end of month
-                print(f"[fetch_monthly_prices] Resampling data to monthly for {ticker}")
+                # print(f"[fetch_monthly_prices] Resampling data to monthly for {ticker}")
                 monthly_data = price_data['Close'].resample('ME').last()
                 print(f"[fetch_monthly_prices] Got {len(monthly_data)} monthly data points")
                 
@@ -105,7 +106,7 @@ class StockDataFetcher:
                             print(f"[fetch_monthly_prices] Failed to get FX rate for {date.strftime('%Y-%m-%d')}")
                 
                 # Create price records
-                print(f"[fetch_monthly_prices] Creating price records for {ticker}")
+                # print(f"[fetch_monthly_prices] Creating price records for {ticker}")
                 records_added = 0
                 for date, price in monthly_data.items():
                     all_prices.append({
@@ -115,7 +116,7 @@ class StockDataFetcher:
                         'currency': 'EUR'
                     })
                     records_added += 1
-                print(f"[fetch_monthly_prices] Added {records_added} price records for {ticker}")
+                # print(f"[fetch_monthly_prices] Added {records_added} price records for {ticker}")
                     
             except Exception as e:
                 print(f"[fetch_monthly_prices] Error processing {ticker}: {str(e)}")
