@@ -14,6 +14,7 @@ from odf.text import P
 from odf.opendocument import OpenDocumentSpreadsheet
 from odf.table import Table, TableRow, TableCell
 from src.db_connector import PostgresConnector
+from src.data_fetcher import StockDataFetcher
 
 # Set pandas display options for better debugging
 pd.set_option('display.max_columns', None)  # Show all columns
@@ -43,6 +44,8 @@ class PortfolioAnalyzer:
         self.transactions_df = None
         self.price_data = None
         self.name_ticker_map = {}  # Mapping from asset name to Yahoo ticker
+        self.db = PostgresConnector()
+        self.data_fetcher = StockDataFetcher(self.db)
 
     @staticmethod
     def get_analysis_path(owner_id: int) -> str:
@@ -91,62 +94,30 @@ class PortfolioAnalyzer:
             print(f"  {name}: {ticker}")
 
     def fetch_market_data(self) -> None:
-        """Fetch market data from Yahoo Finance."""
+        """Fetch market data from Yahoo Finance with currency conversion."""
         print("[FETCH_MARKET_DATA] Starting market data fetch...")
         if self.assets_df is None:
             raise ValueError("Must fetch portfolio data before market data")
+            
+        # Use StockDataFetcher instead of direct yfinance calls
+        prices_df = self.data_fetcher.fetch_monthly_prices(
+            self.owner_id, 
+            self.start_date.strftime('%Y-%m-%d')
+        )
         
-        # Extract Yahoo tickers from the name-ticker mapping
-        tickers = list(self.name_ticker_map.values())
-        # Remove any NaN or None tickers
-        tickers = [ticker for ticker in tickers if isinstance(ticker, str) and ticker.strip() != '']
-        print(f"[FETCH_MARKET_DATA] Attempting to fetch data for tickers: {tickers}")
+        if prices_df.empty:
+            raise ValueError("No valid price data fetched")
+            
+        # Convert the price data to the format we need
+        self.price_data = prices_df.pivot(
+            index='date',
+            columns='asset_id',
+            values='price'
+        )
         
-        if not tickers:
-            raise ValueError("No valid tickers found to fetch market data")
-            
-        try:
-            # Add some buffer days to ensure we have enough data
-            start_date = self.start_date - pd.Timedelta(days=10)
-            print(f"[FETCH_MARKET_DATA] Fetching from date: {start_date}")
-            self.price_data = yf.download(tickers, start=start_date)['Close']
-            print(f"[FETCH_MARKET_DATA] Raw price data shape: {self.price_data.shape}")
-            print(f"[FETCH_MARKET_DATA] Raw price data columns: {self.price_data.columns.tolist()}")
-            
-            # Check for columns that are all NaN
-            nan_columns = self.price_data.columns[self.price_data.isna().all()]
-            if not nan_columns.empty:
-                print(f"[FETCH_MARKET_DATA] Found columns with all NaN values: {nan_columns.tolist()}")
-                print("[FETCH_MARKET_DATA] Removing these columns from analysis")
-                self.price_data = self.price_data.drop(columns=nan_columns)
-                
-                # Also remove these from name_ticker_map
-                ticker_to_name = {v: k for k, v in self.name_ticker_map.items()}
-                for ticker in nan_columns:
-                    if ticker in ticker_to_name:
-                        asset_name = ticker_to_name[ticker]
-                        del self.name_ticker_map[asset_name]
-                        print(f"[FETCH_MARKET_DATA] Removed {asset_name} ({ticker}) from analysis due to missing data")
-
-            print(f"[FETCH_MARKET_DATA] After removing NaN columns - shape: {self.price_data.shape}")
-            print(f"[FETCH_MARKET_DATA] Remaining columns: {self.price_data.columns.tolist()}")
-            print(f"[FETCH_MARKET_DATA] Raw price data index: {self.price_data.index.min()} to {self.price_data.index.max()}")
-            
-            if self.price_data.empty:
-                raise ValueError("No valid price data remained after removing NaN columns")
-                
-            self.price_data = self.price_data.ffill()  # Forward fill missing values
-            
-            # Rename price_data columns from tickers to asset names
-            ticker_to_name = {v: k for k, v in self.name_ticker_map.items()}
-            print(f"[FETCH_MARKET_DATA] Ticker to name mapping after cleanup: {ticker_to_name}")
-            self.price_data.rename(columns=ticker_to_name, inplace=True)
-            print(f"[FETCH_MARKET_DATA] Final price data columns: {self.price_data.columns.tolist()}")
-            
-        except Exception as e:
-            print(f"[FETCH_MARKET_DATA ERROR] Failed to fetch price data: {str(e)}")
-            print(f"[FETCH_MARKET_DATA ERROR] Full error details: {repr(e)}")
-            raise ValueError(f"Failed to fetch price data: {e}")
+        # Rename columns to asset names
+        asset_id_to_name = self.assets_df.set_index('asset_id')['name'].to_dict()
+        self.price_data.columns = [asset_id_to_name.get(col, col) for col in self.price_data.columns]
 
     def calculate_monthly_positions(self) -> Tuple[List[pd.Timestamp], pd.DataFrame]:
         """Calculate monthly positions considering transaction timing."""
@@ -169,8 +140,9 @@ class PortfolioAnalyzer:
         monthly_last_dates = self.price_data.groupby(pd.Grouper(freq='ME')).last()
         valid_dates = monthly_last_dates[~monthly_last_dates.isnull().any(axis=1)].index
         
-        # Initialize positions dictionary
+        # Initialize positions dictionary and accumulation list
         positions_dict = {}
+        accumulation_list = []  # Changed from DataFrame to list
         
         for monthly_date in valid_dates:
             print(f"\n[CALCULATE_MONTHLY_POSITIONS] Processing date: {monthly_date}")
@@ -180,7 +152,29 @@ class PortfolioAnalyzer:
             if not valid_transactions.empty:
                 # Calculate net positions by summing quantities
                 positions = valid_transactions.groupby('name_asset')['quantity'].sum()
-                print(f"Raw positions before validation:\n{positions}")
+                
+                # Add to accumulation tracking
+                for asset_name, quantity in positions.items():
+                    accumulation_list.append({  # Append to list instead of DataFrame
+                        'date': monthly_date,
+                        'name': asset_name,
+                        'quantity': quantity,
+                    })
+                
+                # Create accumulation DataFrame from list
+                accumulation_df = pd.DataFrame(accumulation_list)
+                
+                print(f"\n[CALCULATE_MONTHLY_POSITIONS] Accumulated positions as of {monthly_date}:")
+                # Pivot the accumulation data for better visualization
+                if not accumulation_df.empty:
+                    pivot_table = accumulation_df.pivot_table(
+                        index='date',
+                        columns='name',
+                        values='quantity',
+                        aggfunc='last'
+                    ).fillna(0)
+                    print("\nAccumulated Quantities Over Time:")
+                    print(pivot_table)
                 
                 # Validate positions
                 if (positions < 0).any():
@@ -188,7 +182,7 @@ class PortfolioAnalyzer:
                     print("Negative positions:")
                     print(positions[positions < 0])
                     
-                    # Option 1: Set negative positions to 0
+                    # Set negative positions to 0
                     positions[positions < 0] = 0
                     print("\nPositions after setting negatives to 0:")
                     print(positions)
@@ -213,18 +207,9 @@ class PortfolioAnalyzer:
             positions_df = pd.DataFrame.from_dict(positions_dict, orient='index').fillna(0)
             positions_df.index.name = 'Date'
             
-            # Validate final positions DataFrame
-            if (positions_df < 0).any().any():
-                print("\n[CALCULATE_MONTHLY_POSITIONS] WARNING: Negative values in final positions DataFrame!")
-                print("Negative positions:")
-                print(positions_df[positions_df < 0].dropna(how='all'))
-                # Set any remaining negatives to 0
-                positions_df[positions_df < 0] = 0
-            
-            print(f"\n[CALCULATE_MONTHLY_POSITIONS] Final positions DataFrame:")
-            print(f"Shape: {positions_df.shape}")
-            print(f"Columns: {positions_df.columns.tolist()}")
-            print(f"Sample data:\n{positions_df}")
+            if 'pivot_table' in locals():
+                print("\n[CALCULATE_MONTHLY_POSITIONS] Complete accumulation table:")
+                print(pivot_table)
             
             return list(positions_df.index), positions_df
             

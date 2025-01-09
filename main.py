@@ -59,8 +59,8 @@ def fetch_stock_data(ticker: str, start_date: str) -> Optional[pd.DataFrame]:
             print(f"No data found for ticker {ticker}")
             return None
             
-        print(f"\nPrice data for {ticker}:")
-        print(data.tail())  # Print last 5 rows of data
+        # print(f"\nPrice data for {ticker}:")
+        # print(data.tail())  # Print last 5 rows of data
         return data
         
     except Exception as e:
@@ -130,8 +130,8 @@ def main(start_date: str = "2023-01-01", ma_periods: List[int] = [20, 50, 200]) 
                 print(f"[main] Portfolio analysis failed for owner {owner_id}")
             
             # Create moving average plots
-            print(f"\n[main] === Creating Moving Average Plots for owner {owner_id} ===")
-            create_moving_average_plots(owner_id, start_date, ma_periods)
+            # print(f"\n[main] === Creating Moving Average Plots for owner {owner_id} ===")
+            # create_moving_average_plots(owner_id, start_date, ma_periods)
             
         except Exception as e:
             print(f"[main] Error processing owner {owner_id}: {str(e)}")
