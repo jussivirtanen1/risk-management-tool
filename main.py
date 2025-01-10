@@ -3,6 +3,7 @@ Main module for running portfolio analysis and plotting.
 """
 
 import yfinance as yf
+import polars as pl
 import pandas as pd
 from datetime import datetime, timedelta
 from pathlib import Path
