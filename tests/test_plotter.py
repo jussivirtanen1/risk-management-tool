@@ -5,6 +5,7 @@ Tests for the Plotter module and moving average plotting functionality.
 import unittest
 from unittest.mock import patch, MagicMock
 import pandas as pd
+import polars as pl
 import numpy as np
 from pathlib import Path
 import os
@@ -17,11 +18,18 @@ from datetime import datetime, timedelta
 @pytest.fixture
 def sample_stock_data():
     """Create sample stock data for testing."""
-    dates = pd.date_range(start='2023-01-01', periods=100, freq='D')
-    data = pd.DataFrame({
-        'Close': range(100),
-        'Date': dates
-    }).set_index('Date')
+    dates = pl.date_range(start=datetime(2023, 1, 1), end=datetime(2023, 3, 1), interval="1d")
+    data = pl.DataFrame({
+        "Close": pl.Series(range(100)),
+        "Date": dates
+    })
+    return data
+
+    # dates = pd.date_range(start='2023-01-01', periods=100, freq='D')
+    # data = pd.DataFrame({
+    #     'Close': range(100),
+    #     'Date': dates
+    # }).set_index('Date')
     return data
 
 @pytest.fixture
@@ -40,7 +48,7 @@ class TestMovingAveragePlotter(unittest.TestCase):
             'Low': np.random.randn(len(dates)) + 99,
             'Close': np.random.randn(len(dates)) + 100,
             'Volume': np.random.randint(1000000, 10000000, len(dates))
-        }, index=dates)
+        })
         
         self.test_symbol = "TEST"
         self.plotter = MovingAveragePlotter(self.sample_data, self.test_symbol)
@@ -110,7 +118,7 @@ class TestPlottingFunctionality(unittest.TestCase):
         self.ma_periods = [20, 50, 200]
         
         # Sample active assets data
-        self.sample_active_assets = pd.DataFrame({
+        self.sample_active_assets = pl.DataFrame({
             'name': ['Stock A', 'Stock B'],
             'asset_id': [1, 2],
             'yahoo_ticker': ['AAPL', 'MSFT'],
@@ -119,13 +127,13 @@ class TestPlottingFunctionality(unittest.TestCase):
         
         # Sample stock data
         dates = pd.date_range('2023-01-01', '2023-03-01')
-        self.sample_stock_data = pd.DataFrame({
+        self.sample_stock_data = pl.DataFrame({
             'Open': np.random.randn(len(dates)) + 100,
             'High': np.random.randn(len(dates)) + 101,
             'Low': np.random.randn(len(dates)) + 99,
             'Close': np.random.randn(len(dates)) + 100,
             'Volume': np.random.randint(1000000, 10000000, len(dates))
-        }, index=dates)
+        })
 
     @patch('main.PostgresConnector')
     @patch('main.fetch_stock_data')

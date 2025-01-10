@@ -263,12 +263,9 @@ class PostgresConnector:
         """
         
         result = self.fetch_data(query)
-        print("result type")
-        print(type(result))
         
-        if result is not None:
-            print(f"Found {len(result)} active assets")
-            print(result[['name', 'asset_id', 'yahoo_ticker', 'total_quantity']])
+        assert isinstance(result, pl.DataFrame), f"Expected Polars DataFrame but got {type(result)}"
+        print(f"Found {len(result)} active assets")
         
         return result
 

@@ -46,8 +46,9 @@ def fetch_stock_data(ticker: str, start_date: str) -> Optional[pl.DataFrame]:
         # print(f"\nFetching data for {ticker}")
         try:
             # First try with original start_date
-            end_date = pd.Timestamp.today().strftime('%Y-%m-%d')  # Set end date to today
-            data = yf.download(ticker, start=start_date, end=end_date)
+            # Set end date to today using datetime
+            end_date = datetime.now().strftime('%Y-%m-%d')
+            data = pl.from_pandas(yf.download(ticker, start=start_date, end=end_date))
         except Exception as e:
             # if "YFInvalidPeriodError" in str(e):
             #     print(f"Retrying {ticker} with more recent start date...")
@@ -84,6 +85,8 @@ def create_moving_average_plots(owner_id: int, start_date: str, ma_periods: List
     # Get active assets
     with PostgresConnector() as db:
         active_assets = db.get_active_assets(owner_id)
+        assert isinstance(active_assets, pl.DataFrame), f"Expected Polars DataFrame but got {type(active_assets)}"
+        print("active_assets type")
         print(type(active_assets))
     
     if active_assets is None or active_assets.is_empty():
