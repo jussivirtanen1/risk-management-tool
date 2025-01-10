@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import pandas as pd
+import polars as pl
 import os
 from typing import List, Optional
 from matplotlib.backends.backend_pdf import PdfPages
@@ -7,7 +8,7 @@ from pathlib import Path
 from datetime import datetime
 
 class MovingAveragePlotter:
-    def __init__(self, data: pd.DataFrame, asset_name: str):
+    def __init__(self, data: pl.DataFrame, asset_name: str):
         """
         Initialize the Moving Average Plotter.
         

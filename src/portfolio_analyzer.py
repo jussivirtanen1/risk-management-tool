@@ -105,7 +105,7 @@ class PortfolioAnalyzer:
             self.start_date.strftime('%Y-%m-%d')
         )
         
-        if prices_df.empty:
+        if prices_df.is_empty():
             raise ValueError("No valid price data fetched")
             
         # Convert the price data to the format we need

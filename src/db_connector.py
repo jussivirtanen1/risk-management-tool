@@ -2,6 +2,7 @@
 
 import psycopg2
 import pandas as pd
+import polars as pl
 from typing import Optional, Dict, Any
 import os
 from dotenv import load_dotenv
@@ -68,7 +69,7 @@ class PostgresConnector:
             print(f"Error connecting to database: {e}")
             return False
 
-    def fetch_data(self, query: str, params: Optional[Dict[str, Any]] = None) -> Optional[pd.DataFrame]:
+    def fetch_data(self, query: str, params: Optional[Dict[str, Any]] = None) -> Optional[pl.DataFrame]:
         """
         Execute a SELECT query and return results as a pandas DataFrame.
         
@@ -77,7 +78,7 @@ class PostgresConnector:
             params (dict, optional): Parameters for the SQL query
             
         Returns:
-            Optional[pd.DataFrame]: Query results as DataFrame or None if query fails
+            Optional[pl.DataFrame]: Query results as DataFrame or None if query fails
         """
         try:
             # Check for test protection
@@ -90,8 +91,7 @@ class PostgresConnector:
             self.cur.execute(query, params)
             columns = [desc[0] for desc in self.cur.description]
             data = self.cur.fetchall()
-            
-            return pd.DataFrame(data, columns=columns)
+            return pl.DataFrame(data, schema=columns, orient="row")
             
         except Exception as e:
             print(f"Database error: {e}")
@@ -126,7 +126,7 @@ class PostgresConnector:
                 self.conn.rollback()
             return False
 
-    def get_asset_info(self, asset_id: Optional[int] = None) -> Optional[pd.DataFrame]:
+    def get_asset_info(self, asset_id: Optional[int] = None) -> Optional[pl.DataFrame]:
         """
         Fetch asset information from asset_info table.
         
@@ -134,7 +134,7 @@ class PostgresConnector:
             asset_id (int, optional): Specific asset ID to fetch
             
         Returns:
-            Optional[pd.DataFrame]: Asset information
+            Optional[pl.DataFrame]: Asset information
         """
         query = f"SELECT * FROM {self.schema}.asset_info"
         if asset_id is not None:
@@ -144,7 +144,7 @@ class PostgresConnector:
     def get_asset_transactions(self, 
                              asset_id: Optional[int] = None,
                              start_date: Optional[str] = None,
-                             end_date: Optional[str] = None) -> Optional[pd.DataFrame]:
+                             end_date: Optional[str] = None) -> Optional[pl.DataFrame]:
         """
         Fetch asset transactions with optional filters.
         
@@ -154,7 +154,7 @@ class PostgresConnector:
             end_date (str, optional): End date for transaction filter (YYYY-MM-DD)
             
         Returns:
-            Optional[pd.DataFrame]: Transaction data
+            Optional[pl.DataFrame]: Transaction data
         """
         query = f"SELECT * FROM {self.schema}.asset_transactions"
         conditions = []
@@ -171,7 +171,7 @@ class PostgresConnector:
             
         return self.fetch_data(query)
 
-    def get_asset_owners(self, asset_id: Optional[int] = None) -> Optional[pd.DataFrame]:
+    def get_asset_owners(self, asset_id: Optional[int] = None) -> Optional[pl.DataFrame]:
         """
         Fetch asset ownership information.
         
@@ -179,14 +179,14 @@ class PostgresConnector:
             asset_id (int, optional): Specific asset ID to fetch
             
         Returns:
-            Optional[pd.DataFrame]: Asset ownership data
+            Optional[pl.DataFrame]: Asset ownership data
         """
         query = f"SELECT * FROM {self.schema}.asset_owner"
         if asset_id is not None:
             query += f" WHERE asset_id = {asset_id}"
         return self.fetch_data(query)
 
-    def get_asset_ids(self, asset_id: Optional[int] = None) -> Optional[pd.DataFrame]:
+    def get_asset_ids(self, asset_id: Optional[int] = None) -> Optional[pl.DataFrame]:
         """
         Fetch asset identification information.
         
@@ -194,14 +194,14 @@ class PostgresConnector:
             asset_id (int, optional): Specific asset ID to fetch
             
         Returns:
-            Optional[pd.DataFrame]: Asset identification data
+            Optional[pl.DataFrame]: Asset identification data
         """
         query = f"SELECT * FROM {self.schema}.asset_ids"
         if asset_id is not None:
             query += f" WHERE asset_id = {asset_id}"
         return self.fetch_data(query)
 
-    def get_portfolio_assets(self, owner_id: int) -> Optional[pd.DataFrame]:
+    def get_portfolio_assets(self, owner_id: int) -> Optional[pl.DataFrame]:
         """Get SQL query for fetching asset information for a specific owner."""
         query = f"""
             SELECT 
@@ -219,7 +219,7 @@ class PostgresConnector:
         """
         return self.fetch_data(query)
 
-    def get_portfolio_transactions(self, owner_id: int) -> Optional[pd.DataFrame]:
+    def get_portfolio_transactions(self, owner_id: int) -> Optional[pl.DataFrame]:
         """Get SQL query for fetching transaction data for a specific owner."""
         query = f"""
             SELECT 
@@ -238,7 +238,7 @@ class PostgresConnector:
         """
         return self.fetch_data(query)
 
-    def get_active_assets(self, owner_id: int) -> Optional[pd.DataFrame]:
+    def get_active_assets(self, owner_id: int) -> Optional[pl.DataFrame]:
         """Get assets with quantity > 0 for a specific owner."""
         query = f"""
             WITH current_positions AS (
@@ -263,6 +263,8 @@ class PostgresConnector:
         """
         
         result = self.fetch_data(query)
+        print("result type")
+        print(type(result))
         
         if result is not None:
             print(f"Found {len(result)} active assets")

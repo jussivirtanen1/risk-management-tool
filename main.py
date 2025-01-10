@@ -31,7 +31,7 @@ def get_output_path(folder: str = "analysis", owner_id: int = None) -> str:
         
     return base_path
 
-def fetch_stock_data(ticker: str, start_date: str) -> Optional[pd.DataFrame]:
+def fetch_stock_data(ticker: str, start_date: str) -> Optional[pl.DataFrame]:
     """
     Fetch stock data from Yahoo Finance.
     
@@ -40,7 +40,7 @@ def fetch_stock_data(ticker: str, start_date: str) -> Optional[pd.DataFrame]:
         start_date: Start date for data fetching
         
     Returns:
-        Optional[pd.DataFrame]: Stock price data or None if fetch fails
+        Optional[pl.DataFrame]: Stock price data or None if fetch fails
     """
     try:
         # print(f"\nFetching data for {ticker}")
@@ -49,15 +49,15 @@ def fetch_stock_data(ticker: str, start_date: str) -> Optional[pd.DataFrame]:
             end_date = pd.Timestamp.today().strftime('%Y-%m-%d')  # Set end date to today
             data = yf.download(ticker, start=start_date, end=end_date)
         except Exception as e:
-            if "YFInvalidPeriodError" in str(e):
-                print(f"Retrying {ticker} with more recent start date...")
-                # Try with a more recent start date (6 months ago)
-                recent_start = pd.Timestamp.now() - pd.DateOffset(months=6)
-                data = yf.download(ticker, start=recent_start.strftime('%Y-%m-%d'), end=end_date)
-            else:
-                raise e
+            # if "YFInvalidPeriodError" in str(e):
+            #     print(f"Retrying {ticker} with more recent start date...")
+            #     # Try with a more recent start date (6 months ago)
+            #     recent_start = pd.Timestamp.now() - pd.DateOffset(months=6)
+            #     data = yf.download(ticker, start=recent_start.strftime('%Y-%m-%d'), end=end_date)
+            # else:
+            raise e
 
-        if data.empty:
+        if data.is_empty():
             print(f"No data found for ticker {ticker}")
             return None
             
@@ -84,13 +84,14 @@ def create_moving_average_plots(owner_id: int, start_date: str, ma_periods: List
     # Get active assets
     with PostgresConnector() as db:
         active_assets = db.get_active_assets(owner_id)
+        print(type(active_assets))
     
-    if active_assets is None or active_assets.empty:
+    if active_assets is None or active_assets.is_empty():
         print("No active assets found")
         return
     
     # Create plots for each active asset
-    for _, asset in active_assets.iterrows():
+    for asset in active_assets.iter_rows(named=True):
         ticker = asset['yahoo_ticker']
         name = asset['name']
         # print(f"\nProcessing {name} ({ticker})")
