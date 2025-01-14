@@ -180,7 +180,7 @@ class PortfolioAnalyzer:
                         print("price_data is empty, creating values")
                         date_range = pl.date_range(
                             start=pl.lit(self.start_date), # .str.strptime(pl.Date, format='%Y-%m-%d')
-                            end=pl.now().date(),
+                            end=datetime.now().strftime('%Y-%m-%d'),
                             interval="1mo",
                             closed="left"
                         ).alias("date")

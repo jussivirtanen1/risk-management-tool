@@ -88,10 +88,10 @@ class StockDataFetcher:
                     if fx_ticker == "EUREUR=X":
                         print("fx_ticker", fx_ticker)
                         fx_price_data = pl.DataFrame({
-                            fx_ticker: 1
+                            fx_ticker: pl.lit(1)
                         }).with_columns(date=pl.date_range(
-                            start=pl.lit(start_date),
-                            end=pl.now().date(),
+                            start=start_date,
+                            end=datetime.now().strftime('%Y-%m-%d'),
                             interval="1d"))
                         print("fx_price_data after yf.download", fx_price_data)
                     else:
