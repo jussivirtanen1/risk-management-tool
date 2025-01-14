@@ -47,22 +47,17 @@ class PortfolioAnalyzer:
 
     def fetch_portfolio_data(self) -> None:
         """Fetch asset and transaction data from database."""
-        print("\n[FETCH_PORTFOLIO_DATA] Fetching portfolio data from database...")
+        print("Fetching portfolio data from database...")
         with PostgresConnector() as db:
             self.assets_df = db.get_active_assets(self.owner_id)
             self.transactions_df = db.get_portfolio_transactions(self.owner_id)
             
             if self.transactions_df is not None:
                 # Convert date strings to Polars Date type
-                self.transactions_df = self.transactions_df.with_columns(
-                    pl.col('date').str.strptime(pl.Date, format='%Y-%m-%d')
-                )
+                self.transactions_df = self.transactions_df.with_columns(date=pl.lit(self.start_date)) # pl.col('date').str.strptime(pl.Date, format='%Y-%m-%d')
                 # Filter transactions after start date
-                start_date_pl = pl.lit(self.start_date).str.strptime(pl.Date, format='%Y-%m-%d')
-                self.transactions_df = self.transactions_df.filter(
-                    pl.col('date') >= start_date_pl
-                )
-                print("\n[FETCH_PORTFOLIO_DATA] Filtered Transactions:")
+                start_date_pl = pl.lit(self.start_date) # .str.strptime(pl.Date, format='%Y-%m-%d')
+                self.transactions_df = self.transactions_df.filter(pl.col('date') >= start_date_pl)
                 print(f"Date range: {self.transactions_df['date'].min()} to {self.transactions_df['date'].max()}")
                 print(f"Number of transactions: {len(self.transactions_df)}")
         
@@ -72,20 +67,20 @@ class PortfolioAnalyzer:
         # Create a mapping from asset name to Yahoo ticker
         self.name_ticker_map = self.assets_df.select('name', 'yahoo_ticker').to_dict()
 
-        print(f"\n[FETCH_PORTFOLIO_DATA] Asset Name to Ticker Mapping:")
-        for name, ticker in self.name_ticker_map.items():
-            print(f"  {name}: {ticker}")
+        # print(f"Asset Name to Ticker Mapping:")
+        # for name, ticker in self.name_ticker_map.items():
+        #     print(f"  {name}: {ticker}")
 
     def fetch_market_data(self) -> None:
         """Fetch market data from Yahoo Finance with currency conversion."""
-        print("[FETCH_MARKET_DATA] Starting market data fetch...")
+        print("Starting market data fetch...")
         if self.assets_df is None:
             raise ValueError("Must fetch portfolio data before market data")
             
         # Use StockDataFetcher instead of direct yfinance calls
         prices_df = self.data_fetcher.fetch_monthly_prices(
             self.owner_id, 
-            self.start_date.strftime('%Y-%m-%d')
+            self.start_date
         )
         
         if prices_df.is_empty():
@@ -104,7 +99,7 @@ class PortfolioAnalyzer:
 
     def calculate_monthly_positions(self) -> Tuple[List[pl.Datetime], pl.DataFrame]:
         """Calculate monthly positions considering transaction timing."""
-        if self.transactions_df is None or self.price_data is None:
+        if self.transactions_df is None:
             raise ValueError("Must fetch both transaction and market data first")
 
         # Merge transactions with asset data
@@ -142,11 +137,6 @@ class PortfolioAnalyzer:
             
         return merged_df_cumsum
         # return valid_dates, positions_df
-            
-        except Exception as e:
-            print(f"[CALCULATE_MONTHLY_POSITIONS ERROR] Failed to create positions DataFrame: {str(e)}")
-            print(f"[CALCULATE_MONTHLY_POSITIONS ERROR] Full error details: {repr(e)}")
-            raise ValueError(f"Failed to create positions DataFrame: {e}")
 
     def calculate_portfolio_proportions(self, positions: pl.DataFrame) -> pl.DataFrame:
         """
@@ -155,7 +145,7 @@ class PortfolioAnalyzer:
         # Get the latest EUR prices from transactions for assets missing in price_data
         missing_assets = set(positions.columns) - set(self.price_data.columns)
         if missing_assets:
-            print(f"\n[CALCULATE_PORTFOLIO_PROPORTIONS] Assets missing Yahoo data: {missing_assets}")
+            print(f"Assets missing Yahoo data: {missing_assets}")
             print("Using EUR prices from transactions for these assets...")
             
             for asset in missing_assets:
@@ -187,8 +177,9 @@ class PortfolioAnalyzer:
                     # Create a Series with this price for all dates in our date range
                     if self.price_data.is_empty():
                         # If price_data is empty, create it with monthly dates
+                        print("price_data is empty, creating values")
                         date_range = pl.date_range(
-                            start=pl.lit(self.start_date).str.strptime(pl.Date, format='%Y-%m-%d'),
+                            start=pl.lit(self.start_date), # .str.strptime(pl.Date, format='%Y-%m-%d')
                             end=pl.now().date(),
                             interval="1mo",
                             closed="left"
@@ -227,10 +218,8 @@ class PortfolioAnalyzer:
         # Align prices with positions
         
         aligned_prices = self.price_data
-        # aligned_prices = self.price_data.reindex(index=positions.index, method='ffill')
-        # aligned_prices = aligned_prices.reindex(columns=positions.columns, fill_value=0)
         
-        # print("\n[CALCULATE_PORTFOLIO_PROPORTIONS] Aligned prices:")
+        # print("Aligned prices:")
         # print(aligned_prices)
         
         # Verify no zero prices
@@ -244,28 +233,27 @@ class PortfolioAnalyzer:
         if not zero_prices.is_empty():
             print(f"\nWARNING: Found zero prices for assets: {list(zero_prices)}")
             print("This might affect portfolio proportions!")
-        # random_var = pd.DataFrame()
-        # assert isinstance(random_var, pl.DataFrame), f"positions {positions}"
-        # assert isinstance(random_var, pl.DataFrame), f"aligned_prices {aligned_prices}"
         
         # Calculate portfolio values
+        print("positions", positions)
+        print("aligned_prices", aligned_prices)
+            # Cast columns to float before multiplication
+        positions = positions.select(pl.col('*').exclude('Date').cast(pl.Float64))
+        
+        aligned_prices = aligned_prices.select(pl.col('*').exclude('date').cast(pl.Float64))
         portfolio_values = positions * aligned_prices
-        
+        print("portfolio_values", portfolio_values)
         # Calculate total portfolio value per date
-        total_values = portfolio_values.sum(axis=1).replace(0, pl.Null)
-        
         # Calculate proportions
-        proportions = portfolio_values.div(total_values, axis=0).multiply(100)
-        proportions = proportions.round(2).fillna(0)
         
+        proportions = (portfolio_values / portfolio_values.sum_horizontal()) * 100
+        print("proportions", proportions)
+        proportions = proportions.with_columns(pl.col("*").round(2))
         # Verify proportions sum to approximately 100%
-        sum_proportions = proportions.sum(axis=1)
+        sum_proportions = proportions.sum()
 
-        
-        if not all(sum_proportions.between(99, 101)):
-            print("\nWARNING: Some dates have proportions not summing to 100%!")
-        
-        
+        # if not all(sum_proportions.between(99, 101)):
+        #     print("\nWARNING: Some dates have proportions not summing to 100%!")
         return proportions
 
     def export_to_ods(self, df: pl.DataFrame) -> str:
@@ -367,6 +355,7 @@ class PortfolioAnalyzer:
             
             try:
                 self.fetch_market_data()
+                print(self.fetch_market_data(), "self.fetch_market_data()")
             except ValueError as e:
                 if "No valid tickers found" in str(e):
                     return None
@@ -395,7 +384,7 @@ def main(start_date: str = "2023-01-01") -> dict:
     Returns:
         dict: Dictionary of owner_id: analysis_results pairs
     """
-    owner_ids = [10, 20, 30]
+    owner_ids = [10]
     results = {}
     
     for owner_id in owner_ids:

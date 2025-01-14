@@ -254,7 +254,8 @@ class PostgresConnector:
                 id.name,
                 id.asset_id,
                 id.yahoo_ticker,
-                cp.total_quantity
+                cp.total_quantity,
+                id.yahoo_fx_ticker
             FROM current_positions cp
             JOIN {self.schema}.asset_ids id ON cp.asset_id = id.asset_id
             WHERE id.yahoo_ticker IS NOT NULL 
