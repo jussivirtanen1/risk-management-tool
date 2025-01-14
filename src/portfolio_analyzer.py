@@ -5,6 +5,7 @@ Analyzes portfolio composition over time using transaction data and market price
 """
 
 import pandas as pd
+import polars as pl
 import yfinance as yf
 from datetime import datetime, date
 from pathlib import Path
@@ -17,10 +18,6 @@ from src.db_connector import PostgresConnector
 from src.data_fetcher import StockDataFetcher
 
 # Set pandas display options for better debugging
-pd.set_option('display.max_columns', None)  # Show all columns
-pd.set_option('display.max_rows', None)     # Show all rows
-pd.set_option('display.width', None)        # Don't wrap wide DataFrames
-pd.set_option('display.max_colwidth', None) # Don't truncate cell contents
 
 class PortfolioAnalyzer:
     def __init__(self, owner_id: int, start_date: str = "2023-01-01"):
@@ -32,14 +29,7 @@ class PortfolioAnalyzer:
             start_date: Start date for analysis
         """
         self.owner_id = owner_id
-        # Convert start_date to pandas Timestamp immediately
-        try:
-            self.start_date = pd.to_datetime(start_date)
-            # print(f"[INIT] Start date set to: {self.start_date}")
-        except Exception as e:
-            # print(f"[INIT ERROR] Invalid start_date format: {start_date} | Error: {e}")
-            raise ValueError(f"Invalid start_date format: {start_date}")
-
+        self.start_date = start_date  # Keep the original string
         self.assets_df = None
         self.transactions_df = None
         self.price_data = None
@@ -62,21 +52,16 @@ class PortfolioAnalyzer:
             self.assets_df = db.get_active_assets(self.owner_id)
             self.transactions_df = db.get_portfolio_transactions(self.owner_id)
             
-            # print("\n[FETCH_PORTFOLIO_DATA] Assets DataFrame:")
-            # print(f"Columns: {self.assets_df.columns.tolist()}")
-            # print(f"Shape: {self.assets_df.shape}")
-            # print("Data:")
-            # print(self.assets_df)
-            
-            # print("\n[FETCH_PORTFOLIO_DATA] Transactions DataFrame:")
-            # print(f"Columns: {self.transactions_df.columns.tolist()}")
-            # print(f"Shape: {self.transactions_df.shape}")
-            # print("Data:")
-            # print(self.transactions_df)
-            
             if self.transactions_df is not None:
-                self.transactions_df['date'] = pd.to_datetime(self.transactions_df['date'])
-                self.transactions_df = self.transactions_df[self.transactions_df['date'] >= self.start_date]
+                # Convert date strings to Polars Date type
+                self.transactions_df = self.transactions_df.with_columns(
+                    pl.col('date').str.strptime(pl.Date, format='%Y-%m-%d')
+                )
+                # Filter transactions after start date
+                start_date_pl = pl.lit(self.start_date).str.strptime(pl.Date, format='%Y-%m-%d')
+                self.transactions_df = self.transactions_df.filter(
+                    pl.col('date') >= start_date_pl
+                )
                 print("\n[FETCH_PORTFOLIO_DATA] Filtered Transactions:")
                 print(f"Date range: {self.transactions_df['date'].min()} to {self.transactions_df['date'].max()}")
                 print(f"Number of transactions: {len(self.transactions_df)}")
@@ -85,10 +70,8 @@ class PortfolioAnalyzer:
             raise ValueError("Failed to fetch portfolio data from database")
 
         # Create a mapping from asset name to Yahoo ticker
-        self.name_ticker_map = pd.Series(
-            self.assets_df.yahoo_ticker.values,
-            index=self.assets_df.name
-        ).to_dict()
+        self.name_ticker_map = self.assets_df.select('name', 'yahoo_ticker').to_dict()
+
         print(f"\n[FETCH_PORTFOLIO_DATA] Asset Name to Ticker Mapping:")
         for name, ticker in self.name_ticker_map.items():
             print(f"  {name}: {ticker}")
@@ -119,110 +102,56 @@ class PortfolioAnalyzer:
         asset_id_to_name = self.assets_df.set_index('asset_id')['name'].to_dict()
         self.price_data.columns = [asset_id_to_name.get(col, col) for col in self.price_data.columns]
 
-    def calculate_monthly_positions(self) -> Tuple[List[pd.Timestamp], pd.DataFrame]:
+    def calculate_monthly_positions(self) -> Tuple[List[pl.Datetime], pl.DataFrame]:
         """Calculate monthly positions considering transaction timing."""
-        # print("\n[CALCULATE_MONTHLY_POSITIONS] Starting monthly positions calculation...")
         if self.transactions_df is None or self.price_data is None:
             raise ValueError("Must fetch both transaction and market data first")
 
         # Merge transactions with asset data
-        merged_df = self.transactions_df.merge(
-            self.assets_df[['asset_id', 'name', 'yahoo_ticker']],
+        merged_df = self.transactions_df.join(
+            self.assets_df.select(['asset_id', 'name', 'yahoo_ticker']),
             on='asset_id',
-            how='left',
-            suffixes=('_trans', '_asset')
+            how='left'
         )
+        # print("merged_df columns", merged_df.columns)
+        # print("merged_df", merged_df.select('date', 'name', 'quantity', 'price_eur', 'yahoo_ticker'))
+        # Sort transactions by date
+        merged_df = merged_df.sort('date')
+        # print("merged_df sorted", merged_df.select('date', 'name', 'quantity', 'price_eur', 'yahoo_ticker'))
+        # print("merged_df pivot", merged_df.pivot("name", index="date", aggregate_function="sum", values="quantity"))
+        # merged_df_pivoted = merged_df.pivot("name", index="date", aggregate_function="sum", values="quantity")
+        # merged_df_pivoted.columns.remove('date')
+        merged_df_cumsum = merged_df.with_columns(
+            cumulative_quantity=pl.col("quantity")
+            .cum_sum()
+            .over("name", order_by="date")
+            ).select('date', 'name', 'cumulative_quantity', 'quantity', 'price_eur', 'yahoo_ticker')\
+             .pivot("name", index="date", values="cumulative_quantity")
         
-        # print("\n[CALCULATE_MONTHLY_POSITIONS] Transaction types in data:")
-        # print(merged_df['event_type'].value_counts())
+        print("merged_df cumsum", merged_df_cumsum)
+        # Group by month end and get last dates
+        # print("\n[CALCULATE_MONTHLY_POSITIONS] Price data:" )
+        # print(self.price_data)
+        # print("self.price_data", self.price_data.columns)
+        # print("self.price_data", self.price_data)
+        # monthly_last_dates = self.price_data
+        # print("monthly_last_dates", monthly_last_dates)
         
-        # Sort transactions by date to ensure proper accumulation
-        merged_df = merged_df.sort_values('date')
-        # print("\n[CALCULATE_MONTHLY_POSITIONS] Transactions after sorting:")
-        # print(merged_df[['date', 'name_asset', 'quantity', 'event_type']])
-        
-        # Group by month end ('ME') frequency
-        monthly_last_dates = self.price_data.groupby(pd.Grouper(freq='ME')).last()
-        valid_dates = monthly_last_dates[~monthly_last_dates.isnull().any(axis=1)].index
-        
-        # Initialize positions dictionary and accumulation tracking
-        positions_dict = {}
-        running_positions = {}  # Track running total for each asset
-        
-        for monthly_date in valid_dates:
-            # print(f"\n[CALCULATE_MONTHLY_POSITIONS] Processing date: {monthly_date}")
-            valid_transactions = merged_df[merged_df['date'] <= monthly_date]
-            # print(f"Number of valid transactions: {len(valid_transactions)}")
+        # valid_dates = monthly_last_dates['date'].to_list()
+        # print('valid_dates', valid_dates)
             
-            if not valid_transactions.empty:
-                # Calculate running positions by processing transactions chronologically
-                for _, transaction in valid_transactions.iterrows():
-                    asset_name = transaction['name_asset']
-                    quantity = transaction['quantity']
-                    
-                    # Initialize position if not exists
-                    if asset_name not in running_positions:
-                        running_positions[asset_name] = 0
-                    
-                    # Update running position
-                    running_positions[asset_name] += quantity
-                    
-                # Create positions Series from running positions
-                positions = pd.Series(running_positions)
-                
-                # print(f"\n[CALCULATE_MONTHLY_POSITIONS] Running positions as of {monthly_date}:")
-                # for asset, qty in running_positions.items():
-                #     print(f"  {asset}: {qty}")
-                
-                # Validate positions
-                if (positions < 0).any():
-                    print("\n[CALCULATE_MONTHLY_POSITIONS] WARNING: Found negative positions!")
-                    # print("Negative positions:")
-                    # print(positions[positions < 0])
-                    
-                    # Set negative positions to 0
-                    positions[positions < 0] = 0
-                        # print("\nPositions after setting negatives to 0:")
-                        # print(positions)
-                
-                # Filter out zero positions
-                positions = positions[positions != 0]
-                # print(f"\nFinal positions for {monthly_date}:\n{positions}")
-                
-                if not positions.empty:
-                    positions_dict[monthly_date] = positions
-                else:
-                    print("No non-zero positions found for this date")
-            else:
-                print("No valid transactions found for this date")
-
-        # print(f"\n[CALCULATE_MONTHLY_POSITIONS] Final positions dictionary size: {len(positions_dict)}")
-        
-        if not positions_dict:
-            raise ValueError("No valid portfolio positions found for the given dates.")
-
-        try:
-            positions_df = pd.DataFrame.from_dict(positions_dict, orient='index').fillna(0)
-            positions_df.index.name = 'Date'
-            
-            # print("\n[CALCULATE_MONTHLY_POSITIONS] Complete positions DataFrame:")
-            # print(positions_df)
-            
-            return list(positions_df.index), positions_df
+        return merged_df_cumsum
+        # return valid_dates, positions_df
             
         except Exception as e:
             print(f"[CALCULATE_MONTHLY_POSITIONS ERROR] Failed to create positions DataFrame: {str(e)}")
             print(f"[CALCULATE_MONTHLY_POSITIONS ERROR] Full error details: {repr(e)}")
             raise ValueError(f"Failed to create positions DataFrame: {e}")
 
-    def calculate_portfolio_proportions(self, positions: pd.DataFrame) -> pd.DataFrame:
+    def calculate_portfolio_proportions(self, positions: pl.DataFrame) -> pl.DataFrame:
         """
         Calculate portfolio proportions over time.
         """
-        # print("\n[CALCULATE_PORTFOLIO_PROPORTIONS] Starting proportion calculations...")
-        # print("\nInput positions:")
-        # print(positions)
-        
         # Get the latest EUR prices from transactions for assets missing in price_data
         missing_assets = set(positions.columns) - set(self.price_data.columns)
         if missing_assets:
@@ -232,8 +161,8 @@ class PortfolioAnalyzer:
             for asset in missing_assets:
                 try:
                     # Get asset_id for the missing asset
-                    asset_matches = self.assets_df[self.assets_df['name'] == asset]
-                    if asset_matches.empty:
+                    asset_matches = self.assets_df.filter(pl.col('name') == asset)
+                    if asset_matches.is_empty():
                         print(f"WARNING: Asset {asset} not found in assets_df")
                         continue
                         
@@ -241,70 +170,89 @@ class PortfolioAnalyzer:
                     print(f"Found asset_id {asset_id} for {asset}")
                     
                     # Get all transactions for this asset with EUR prices
-                    asset_transactions = self.transactions_df[
-                        (self.transactions_df['asset_id'] == asset_id) &
-                        (self.transactions_df['price_eur'].notna())
-                    ]
+                    asset_transactions = self.transactions_df.filter(
+                        (pl.col('asset_id') == asset_id) &
+                        (pl.col('price_eur').is_not_null())
+                    )
                     
-                    if asset_transactions.empty:
+                    if asset_transactions.is_empty():
                         print(f"WARNING: No transactions found for asset {asset} (id: {asset_id})")
                         continue
                         
-                    asset_transactions = asset_transactions.sort_values('date', ascending=False)
-                    
                     # Get the latest EUR price
-                    latest_price = asset_transactions.iloc[0]['price_eur']
-                    latest_price_date = asset_transactions.iloc[0]['date']
+                    latest_price = asset_transactions.sort('date', descending=True)['price_eur'][0]
+                    latest_price_date = asset_transactions.sort('date', descending=True)['date'][0]
                     print(f"Using price {latest_price} EUR for {asset} (from {latest_price_date})")
                     
                     # Create a Series with this price for all dates in our date range
-                    if self.price_data.empty:
+                    if self.price_data.is_empty():
                         # If price_data is empty, create it with monthly dates
-                        date_range = pd.date_range(
-                            start=self.start_date,
-                            end=pd.Timestamp.now(),
-                            freq='ME'
-                        )
-                        self.price_data = pd.DataFrame(index=date_range)
+                        date_range = pl.date_range(
+                            start=pl.lit(self.start_date).str.strptime(pl.Date, format='%Y-%m-%d'),
+                            end=pl.now().date(),
+                            interval="1mo",
+                            closed="left"
+                        ).alias("date")
+                        
+                        self.price_data = pl.DataFrame({
+                            "date": date_range
+                        })
+                        
+                        # Assert price data is properly initialized
+                        assert not self.price_data.is_empty(), "Price data should not be empty after initialization"
+                        assert 'date' in self.price_data.columns, "Price data should have a date column"
+                        assert len(self.price_data) > 0, "Price data should have rows"
+                        assert self.price_data['date'].dtype == pl.Date, "Date column should be of type Date"
                     
                     # Fill the entire date range with this price
-                    self.price_data[asset] = latest_price
+                    self.price_data = self.price_data.with_columns(
+                        pl.lit(latest_price).alias(asset)
+                    )
+                    
+                    # Assert the new asset column was added correctly
+                    assert asset in self.price_data.columns, f"Asset {asset} should be added to price data"
+                    assert self.price_data[asset].mean() == latest_price, f"Asset {asset} should have price {latest_price}"
+                    
                     print(f"Added constant price {latest_price} EUR for {asset} across all dates")
                     
                 except Exception as e:
                     print(f"ERROR processing asset {asset}: {str(e)}")
                     print(f"Debug info:")
                     print(f"Asset matches in assets_df:")
-                    print(self.assets_df[self.assets_df['name'] == asset])
+                    # print(self.assets_df.filter(pl.col('name') == asset))
                     print(f"Transactions for asset:")
                     print(asset_transactions if 'asset_transactions' in locals() else "No transactions queried yet")
                     continue
         
-        # print("\n[CALCULATE_PORTFOLIO_PROPORTIONS] Price data after adding missing assets:")
-        # print(self.price_data)
-        
         # Align prices with positions
-        aligned_prices = self.price_data.reindex(index=positions.index, method='ffill')
-        aligned_prices = aligned_prices.reindex(columns=positions.columns, fill_value=0)
+        
+        aligned_prices = self.price_data
+        # aligned_prices = self.price_data.reindex(index=positions.index, method='ffill')
+        # aligned_prices = aligned_prices.reindex(columns=positions.columns, fill_value=0)
         
         # print("\n[CALCULATE_PORTFOLIO_PROPORTIONS] Aligned prices:")
         # print(aligned_prices)
         
         # Verify no zero prices
-        zero_prices = aligned_prices.columns[aligned_prices.eq(0).any()]
-        if not zero_prices.empty:
+
+        zero_prices = (aligned_prices
+                        .filter(
+                            pl.any_horizontal(pl.col('*').is_null())
+                        )
+                    )
+
+        if not zero_prices.is_empty():
             print(f"\nWARNING: Found zero prices for assets: {list(zero_prices)}")
             print("This might affect portfolio proportions!")
+        # random_var = pd.DataFrame()
+        # assert isinstance(random_var, pl.DataFrame), f"positions {positions}"
+        # assert isinstance(random_var, pl.DataFrame), f"aligned_prices {aligned_prices}"
         
         # Calculate portfolio values
         portfolio_values = positions * aligned_prices
-        # print("\n[CALCULATE_PORTFOLIO_PROPORTIONS] Portfolio values:")
-        # print(portfolio_values)
         
         # Calculate total portfolio value per date
-        total_values = portfolio_values.sum(axis=1).replace(0, pd.NA)
-        # print("\n[CALCULATE_PORTFOLIO_PROPORTIONS] Total portfolio values:")
-        # print(total_values)
+        total_values = portfolio_values.sum(axis=1).replace(0, pl.Null)
         
         # Calculate proportions
         proportions = portfolio_values.div(total_values, axis=0).multiply(100)
@@ -312,18 +260,15 @@ class PortfolioAnalyzer:
         
         # Verify proportions sum to approximately 100%
         sum_proportions = proportions.sum(axis=1)
-        # print("\n[CALCULATE_PORTFOLIO_PROPORTIONS] Sum of proportions per date:")
-        # print(sum_proportions)
+
         
         if not all(sum_proportions.between(99, 101)):
             print("\nWARNING: Some dates have proportions not summing to 100%!")
         
-        # print("\n[CALCULATE_PORTFOLIO_PROPORTIONS] Final proportions:")
-        # print(proportions)
         
         return proportions
 
-    def export_to_ods(self, df: pd.DataFrame) -> str:
+    def export_to_ods(self, df: pl.DataFrame) -> str:
         """
         Export DataFrame to .ods file.
         
@@ -363,7 +308,7 @@ class PortfolioAnalyzer:
             
             # Add Date Cell
             date_cell = TableCell(valuetype="string")
-            if isinstance(idx, pd.Timestamp):
+            if isinstance(idx, pl.Datetime):
                 date_str = idx.strftime("%Y-%m-%d")
             else:
                 date_str = str(idx)
@@ -372,7 +317,7 @@ class PortfolioAnalyzer:
             
             # Add Portfolio Proportions Cells
             for value in row:
-                if pd.isna(value):
+                if pl.is_null(value):
                     numeric_value = 0.00
                     # print(f"[EXPORT_TO_ODS WARNING] Found NaN value for date {date_str}. Replacing with 0.00.")
                 else:
@@ -405,7 +350,7 @@ class PortfolioAnalyzer:
             # print(f"[EXPORT_TO_ODS ERROR] Failed to export to .ods: {e}")
             raise ValueError(f"Failed to export to .ods: {e}")
 
-    def analyze(self) -> Optional[pd.DataFrame]:
+    def analyze(self) -> Optional[pl.DataFrame]:
         """
         Run the complete portfolio analysis.
         
@@ -417,7 +362,7 @@ class PortfolioAnalyzer:
             self.fetch_portfolio_data()
             
             # If we have no assets or transactions, return None early
-            if self.assets_df.empty or self.transactions_df.empty:
+            if self.assets_df.is_empty() or self.transactions_df.is_empty():
                 return None
             
             try:
@@ -432,7 +377,7 @@ class PortfolioAnalyzer:
             proportions = self.calculate_portfolio_proportions(positions)
 
             # Export results
-            if not proportions.empty:
+            if not proportions.is_empty():
                 self.export_to_ods(proportions)
                 return proportions
             return None

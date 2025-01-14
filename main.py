@@ -97,7 +97,6 @@ def create_moving_average_plots(owner_id: int, start_date: str, ma_periods: List
     for asset in active_assets.iter_rows(named=True):
         ticker = asset['yahoo_ticker']
         name = asset['name']
-        # print(f"\nProcessing {name} ({ticker})")
         
         # Fetch stock data
         stock_data = fetch_stock_data(ticker, start_date)
