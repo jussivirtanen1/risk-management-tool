@@ -17,8 +17,6 @@ from odf.table import Table, TableRow, TableCell
 from src.db_connector import PostgresConnector
 from src.data_fetcher import StockDataFetcher
 
-# Set pandas display options for better debugging
-
 class PortfolioAnalyzer:
     def __init__(self, owner_id: int, start_date: str = "2023-01-01"):
         """
@@ -88,17 +86,17 @@ class PortfolioAnalyzer:
         """Calculate monthly positions considering transaction timing."""
         if self.transactions_df is None:
             raise ValueError("Must fetch both transaction and market data first")
-        print("self.transactions_df", self.transactions_df.select('date', 'name', 'quantity', 'price_eur'))
+        # print("self.transactions_df", self.transactions_df.select('date', 'name', 'quantity', 'price_eur'))
         # Merge transactions with asset data
         merged_df = self.transactions_df.join(
             self.assets_df.select(['asset_id', 'name', 'yahoo_ticker']),
             on='asset_id',
             how='left'
         )
-        print("merged_df", merged_df)
+        # print("merged_df", merged_df)
         # print("merged_df columns", merged_df.columns)
         # print("merged_df", merged_df.select('date', 'name', 'quantity', 'price_eur', 'yahoo_ticker'))
-        print("merged_df before cumsum", merged_df.select('date', 'name', 'quantity', 'price_eur', 'yahoo_ticker'))
+        # print("merged_df before cumsum", merged_df.select('date', 'name', 'quantity', 'price_eur', 'yahoo_ticker'))
         # print("merged_df sorted", merged_df.select('date', 'name', 'quantity', 'price_eur', 'yahoo_ticker'))
         # print("merged_df pivot", merged_df.pivot("name", index="date", aggregate_function="sum", values="quantity"))
         # merged_df_pivoted = merged_df.pivot("name", index="date", aggregate_function="sum", values="quantity")
@@ -107,10 +105,11 @@ class PortfolioAnalyzer:
             cumulative_quantity=pl.col("quantity")
             .cum_sum()
             .over("name", order_by="date")
-            ).select('date', 'name', 'cumulative_quantity', 'quantity', 'price_eur', 'yahoo_ticker')
-            #  .pivot("yahoo_ticker", index="date", values="cumulative_quantity", aggregate_function="sum")
+            ).select('date', 'name', 'cumulative_quantity', 'quantity', 'price_eur', 'yahoo_ticker')\
+             .pivot("yahoo_ticker", index="date", values="cumulative_quantity", aggregate_function="sum")\
+             .fill_null(strategy="forward")
         
-        print("merged_df cumsum from calculate_monthly_positions", merged_df_cumsum)
+        # print("merged_df cumsum from calculate_monthly_positions", merged_df_cumsum)
         # Group by month end and get last dates
         # print("\n[CALCULATE_MONTHLY_POSITIONS] Price data:" )
         # print(self.price_data)
@@ -130,202 +129,270 @@ class PortfolioAnalyzer:
         Calculate portfolio proportions over time.
         """
         # Get the latest EUR prices from transactions for assets missing in price_data
-        print("merged_df_cumsum", merged_df_cumsum)
-        print("self.price_data", self.price_data)
+        # print("merged_df_cumsum", merged_df_cumsum)
+        # print("self.price_data", self.price_data)
         missing_assets = set(merged_df_cumsum.columns) - set(self.price_data.columns)
         if missing_assets:
             print(f"Assets missing Yahoo data: {missing_assets}")
             print("Using EUR prices from transactions for these assets...")
-            
-            for asset in missing_assets:
-                try:
-                    # Get asset_id for the missing asset
-                    asset_matches = self.assets_df.filter(pl.col('name') == asset)
-                    if asset_matches.is_empty():
-                        print(f"WARNING: Asset {asset} not found in assets_df")
-                        continue
-                        
-                    asset_id = asset_matches['asset_id'].iloc[0]
-                    print(f"Found asset_id {asset_id} for {asset}")
-                    
-                    # Get all transactions for this asset with EUR prices
-                    asset_transactions = self.transactions_df.filter(
-                        (pl.col('asset_id') == asset_id) &
-                        (pl.col('price_eur').is_not_null())
-                    )
-                    
-                    if asset_transactions.is_empty():
-                        print(f"WARNING: No transactions found for asset {asset} (id: {asset_id})")
-                        continue
-                        
-                    # Get the latest EUR price
-                    latest_price = asset_transactions.sort('date', descending=True)['price_eur'][0]
-                    latest_price_date = asset_transactions.sort('date', descending=True)['date'][0]
-                    print(f"Using price {latest_price} EUR for {asset} (from {latest_price_date})")
-                    
-                    # Create a Series with this price for all dates in our date range
-                    if self.price_data.is_empty():
-                        # If price_data is empty, create it with monthly dates
-                        print("price_data is empty, creating values")
-                        date_range = pl.date_range(
-                            start=pl.lit(self.start_date), # .str.strptime(pl.Date, format='%Y-%m-%d')
-                            end=datetime.now().strftime('%Y-%m-%d'),
-                            interval="1mo",
-                            closed="left"
-                        ).alias("date")
-                        
-                        self.price_data = pl.DataFrame({
-                            "date": date_range
-                        })
-                        
-                        # Assert price data is properly initialized
-                        assert not self.price_data.is_empty(), "Price data should not be empty after initialization"
-                        assert 'date' in self.price_data.columns, "Price data should have a date column"
-                        assert len(self.price_data) > 0, "Price data should have rows"
-                        assert self.price_data['date'].dtype == pl.Date, "Date column should be of type Date"
-                    
-                    # Fill the entire date range with this price
-                    self.price_data = self.price_data.with_columns(
-                        pl.lit(latest_price).alias(asset)
-                    )
-                    
-                    # Assert the new asset column was added correctly
-                    assert asset in self.price_data.columns, f"Asset {asset} should be added to price data"
-                    assert self.price_data[asset].mean() == latest_price, f"Asset {asset} should have price {latest_price}"
-                    
-                    print(f"Added constant price {latest_price} EUR for {asset} across all dates")
-                    
-                except Exception as e:
-                    print(f"ERROR processing asset {asset}: {str(e)}")
-                    print(f"Debug info:")
-                    print(f"Asset matches in assets_df:")
-                    # print(self.assets_df.filter(pl.col('name') == asset))
-                    print(f"Transactions for asset:")
-                    print(asset_transactions if 'asset_transactions' in locals() else "No transactions queried yet")
-                    continue
-        
-        # Align prices with positions
-        
-        aligned_prices = self.price_data
-        
-        # print("Aligned prices:")
-        # print(aligned_prices)
-        
-        # Verify no zero prices
 
-        zero_prices = (aligned_prices
-                        .filter(
-                            pl.any_horizontal(pl.col('*').is_null())
-                        )
-                    )
 
-        if not zero_prices.is_empty():
-            print(f"\nWARNING: Found zero prices for assets: {list(zero_prices)}")
-            print("This might affect portfolio proportions!")
-        
-        # Calculate portfolio values
-        print("positions", positions)
-        print("aligned_prices", aligned_prices)
-            # Cast columns to float before multiplication
-        positions = positions.select(pl.col('*').exclude('Date').cast(pl.Float64))
-        
-        aligned_prices = aligned_prices.select(pl.col('*').exclude('date').cast(pl.Float64))
-        portfolio_values = positions * aligned_prices
-        print("portfolio_values", portfolio_values)
-        # Calculate total portfolio value per date
-        # Calculate proportions
-        
-        proportions = (portfolio_values / portfolio_values.sum_horizontal()) * 100
-        print("proportions", proportions)
-        proportions = proportions.with_columns(pl.col("*").round(2))
-        # Verify proportions sum to approximately 100%
-        sum_proportions = proportions.sum()
+                                # .select(pl.col("date").dt.month_end(), pl.col("*").exclude('date'))\
+                                # .unique(subset=["date"])\
+        quantities = self.price_data.select('date')\
+                                            .join(merged_df_cumsum, on='date', how='left')\
+                                            .fill_null(strategy="forward")\
+                                            .sort('date')
+        # print("quantities from calculate_portfolio_proportions", quantities)
+        # print("self.price_data", self.price_data)
 
-        # if not all(sum_proportions.between(99, 101)):
-        #     print("\nWARNING: Some dates have proportions not summing to 100%!")
-        return proportions
+        # Multiply price data with positions
+        # Multiply price data with positions
+        asset_values = self.price_data.join(
+            quantities,
+            on='date',
+            how='left'
+        )\
+        .select([
+            pl.col('date'),
+            *[pl.col(f"{col}").mul(pl.col(f"{col}_right")).alias(col)
+            for col in self.price_data.columns if col != 'date']
+        ])\
+        .drop_nulls()
+        # print("multiplied portfolio_values", asset_values)
 
-    def export_to_ods(self, df: pl.DataFrame) -> str:
+        asset_values_w_sum = asset_values.select(pl.col('*'), pl.sum_horizontal(pl.all().exclude('date')).alias('total'))
+        # print("asset_values_w_sum", asset_values_w_sum)
+        asset_proportions = asset_values_w_sum.select(pl.col('date'), (pl.col('*').exclude('date') / pl.col('total')) * 100)  
+        # print("asset_proportions", asset_proportions)
+
+        # print("assets_df", self.assets_df)
+        rename_dict = dict(self.assets_df.select('yahoo_ticker', 'name').iter_rows())
+        # print("rename_dict", rename_dict)
+        asset_proportions = asset_proportions.select(pl.col('*').exclude('date').round(2))\
+                                             .rename(rename_dict)
+        # print("asset_proportions", asset_proportions)
+
+
+
+
+        #     for asset in missing_assets:
+        #         try:
+        #             # Get asset_id for the missing asset
+        #             asset_matches = self.assets_df.filter(pl.col('name') == asset)
+        #             if asset_matches.is_empty():
+        #                 print(f"WARNING: Asset {asset} not found in assets_df")
+        #                 continue
+                        
+        #             asset_id = asset_matches['asset_id'].iloc[0]
+        #             print(f"Found asset_id {asset_id} for {asset}")
+                    
+        #             # Get all transactions for this asset with EUR prices
+        #             asset_transactions = self.transactions_df.filter(
+        #                 (pl.col('asset_id') == asset_id) &
+        #                 (pl.col('price_eur').is_not_null())
+        #             )
+                    
+        #             if asset_transactions.is_empty():
+        #                 print(f"WARNING: No transactions found for asset {asset} (id: {asset_id})")
+        #                 continue
+                        
+        #             # Get the latest EUR price
+        #             latest_price = asset_transactions.sort('date', descending=True)['price_eur'][0]
+        #             latest_price_date = asset_transactions.sort('date', descending=True)['date'][0]
+        #             print(f"Using price {latest_price} EUR for {asset} (from {latest_price_date})")
+                    
+        #             # Create a Series with this price for all dates in our date range
+        #             if self.price_data.is_empty():
+        #                 # If price_data is empty, create it with monthly dates
+        #                 print("price_data is empty, creating values")
+        #                 date_range = pl.date_range(
+        #                     start=pl.lit(self.start_date), # .str.strptime(pl.Date, format='%Y-%m-%d')
+        #                     end=datetime.now().strftime('%Y-%m-%d'),
+        #                     interval="1mo",
+        #                     closed="left"
+        #                 ).alias("date")
+                        
+        #                 self.price_data = pl.DataFrame({
+        #                     "date": date_range
+        #                 })
+                        
+        #                 # Assert price data is properly initialized
+        #                 assert not self.price_data.is_empty(), "Price data should not be empty after initialization"
+        #                 assert 'date' in self.price_data.columns, "Price data should have a date column"
+        #                 assert len(self.price_data) > 0, "Price data should have rows"
+        #                 assert self.price_data['date'].dtype == pl.Date, "Date column should be of type Date"
+                    
+        #             # Fill the entire date range with this price
+        #             self.price_data = self.price_data.with_columns(
+        #                 pl.lit(latest_price).alias(asset)
+        #             )
+                    
+        #             # Assert the new asset column was added correctly
+        #             assert asset in self.price_data.columns, f"Asset {asset} should be added to price data"
+        #             assert self.price_data[asset].mean() == latest_price, f"Asset {asset} should have price {latest_price}"
+                    
+        #             print(f"Added constant price {latest_price} EUR for {asset} across all dates")
+                    
+        #         except Exception as e:
+        #             print(f"ERROR processing asset {asset}: {str(e)}")
+        #             print(f"Debug info:")
+        #             print(f"Asset matches in assets_df:")
+        #             # print(self.assets_df.filter(pl.col('name') == asset))
+        #             print(f"Transactions for asset:")
+        #             print(asset_transactions if 'asset_transactions' in locals() else "No transactions queried yet")
+        #             continue
+        
+        # # Align prices with positions
+        
+        # aligned_prices = self.price_data
+        
+        # # print("Aligned prices:")
+        # # print(aligned_prices)
+        
+        # # Verify no zero prices
+
+        # zero_prices = (aligned_prices
+        #                 .filter(
+        #                     pl.any_horizontal(pl.col('*').is_null())
+        #                 )
+        #             )
+
+        # if not zero_prices.is_empty():
+        #     print(f"\nWARNING: Found zero prices for assets: {list(zero_prices)}")
+        #     print("This might affect portfolio proportions!")
+        
+        # # Calculate portfolio values
+        # print("positions", positions)
+        # print("aligned_prices", aligned_prices)
+        #     # Cast columns to float before multiplication
+        # positions = positions.select(pl.col('*').exclude('Date').cast(pl.Float64))
+        
+        # aligned_prices = aligned_prices.select(pl.col('*').exclude('date').cast(pl.Float64))
+        # portfolio_values = positions * aligned_prices
+        # print("portfolio_values", portfolio_values)
+        # # Calculate total portfolio value per date
+        # # Calculate proportions
+        
+        # proportions = (portfolio_values / portfolio_values.sum_horizontal()) * 100
+        # print("proportions", proportions)
+        # proportions = proportions.with_columns(pl.col("*").round(2))
+        # # Verify proportions sum to approximately 100%
+        # sum_proportions = proportions.sum()
+
+        # # if not all(sum_proportions.between(99, 101)):
+        # #     print("\nWARNING: Some dates have proportions not summing to 100%!")
+        return asset_proportions
+
+    def export_to_csv(self, df: pl.DataFrame) -> str:
         """
-        Export DataFrame to .ods file.
+        Export DataFrame to CSV file.
         
         Args:
             df: DataFrame to export
             
         Returns:
-            Path to saved file
+            str: Path to saved CSV file
         """
-        # print("[EXPORT_TO_ODS] Exporting DataFrame to .ods file...")
-        
-        # Initialize the ODS document and add a table
-        doc = OpenDocumentSpreadsheet()
-        table = Table(name="Portfolio Proportions")
-        doc.spreadsheet.addElement(table)
-        
-        # Add header row
-        header_row = TableRow()
-        
-        # Date header cell
-        date_header = TableCell(valuetype="string")
-        date_header.addElement(P(text="Date"))
-        header_row.addElement(date_header)
-        
-        # Asset headers
-        for col in df.columns:
-            header_cell = TableCell(valuetype="string")
-            header_cell.addElement(P(text=str(col)))
-            header_row.addElement(header_cell)
-        
-        table.addElement(header_row)
-        # print("[EXPORT_TO_ODS] Header row added.")
-        
-        # Add data rows
-        for idx, row in df.iterrows():
-            tr = TableRow()
-            
-            # Add Date Cell
-            date_cell = TableCell(valuetype="string")
-            if isinstance(idx, pl.Datetime):
-                date_str = idx.strftime("%Y-%m-%d")
-            else:
-                date_str = str(idx)
-            date_cell.addElement(P(text=date_str))
-            tr.addElement(date_cell)
-            
-            # Add Portfolio Proportions Cells
-            for value in row:
-                if pl.is_null(value):
-                    numeric_value = 0.00
-                    # print(f"[EXPORT_TO_ODS WARNING] Found NaN value for date {date_str}. Replacing with 0.00.")
-                else:
-                    # Round to two decimal places
-                    numeric_value = round(float(value), 2)
-                    # print(f"[EXPORT_TO_ODS INFO] Writing value {numeric_value} for date {date_str}.")
-                
-                # Create a cell with numerical value
-                cell = TableCell(valuetype="float", value=str(numeric_value))
-                
-                # Note: No need to add Number or P elements for numerical cells
-                tr.addElement(cell)
-            
-            table.addElement(tr)
-        
-        # print("[EXPORT_TO_ODS] Data rows added.")
-        
-        # Define filename and path with owner_id
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"portfolio_proportions_{timestamp}.ods"
+        filename = f"portfolio_proportions_{timestamp}.csv"
         output_path = self.get_analysis_path(self.owner_id)  # Pass owner_id
         full_path = os.path.join(output_path, filename)
         
-        # Save the document
-        try:
-            doc.save(full_path)
-            # print(f"[EXPORT_TO_ODS] File saved to: {full_path}")
-            return full_path
-        except Exception as e:
-            # print(f"[EXPORT_TO_ODS ERROR] Failed to export to .ods: {e}")
-            raise ValueError(f"Failed to export to .ods: {e}")
+        df.write_csv(full_path)
+        print(f"Exported portfolio data to {full_path}")
+        
+        return output_path
+
+    # def export_to_ods(self, df: pl.DataFrame) -> str:
+    #     """
+    #     Export DataFrame to .ods file.
+        
+    #     Args:
+    #         df: DataFrame to export
+            
+    #     Returns:
+    #         Path to saved file
+    #     """
+    #     # print("[EXPORT_TO_ODS] Exporting DataFrame to .ods file...")
+        
+    #     # Initialize the ODS document and add a table
+    #     doc = OpenDocumentSpreadsheet()
+    #     table = Table(name="Portfolio Proportions")
+    #     doc.spreadsheet.addElement(table)
+        
+    #     # Add header row
+    #     header_row = TableRow()
+        
+    #     # Date header cell
+    #     date_header = TableCell(valuetype="string")
+    #     date_header.addElement(P(text="Date"))
+    #     header_row.addElement(date_header)
+        
+    #     # Asset headers
+    #     for col in df.columns:
+    #         header_cell = TableCell(valuetype="string")
+    #         header_cell.addElement(P(text=str(col)))
+    #         header_row.addElement(header_cell)
+        
+    #     table.addElement(header_row)
+    #     # print("[EXPORT_TO_ODS] Header row added.")
+        
+    #     # Add data rows
+
+    #     for row in df.iter_rows(named=True):
+    #         print("row", row)
+    #         date = row['date']
+    #         tr = TableRow()
+            
+    #         # # Add Date Cell
+    #         # date_cell = TableCell(valuetype="string")
+    #         # if isinstance(date, pl.Datetime):
+    #         #     date_str = date.strftime("%Y-%m-%d")
+    #         # else:
+    #         #     date_str = str(date)
+    #         # date_cell.addElement(P(text=date_str))
+    #         # tr.addElement(date_cell)
+            
+    #         # Add Portfolio Proportions Cells
+    #         for value in row.values():
+    #             print("value", type(value))
+    #             # Add Date Cell
+    #             if type(value) is datetime.date:
+    #                 date_cell = TableCell(valuetype="string")
+    #                 date_str = value.strftime("%Y-%m-%d")
+    #                 date_str = str(value)
+    #                 date_cell.addElement(P(text=date_str))
+    #                 tr.addElement(date_cell)
+    #             else:
+    #                 # Round to two decimal places
+    #                 numeric_value = round(float(value), 2)
+    #                 # print(f"[EXPORT_TO_ODS INFO] Writing value {numeric_value} for date {date_str}.")
+                
+    #             # Create a cell with numerical value
+    #             cell = TableCell(valuetype="float", value=str(numeric_value))
+                
+    #             # Note: No need to add Number or P elements for numerical cells
+    #             tr.addElement(cell)
+            
+    #         table.addElement(tr)
+        
+    #     # print("[EXPORT_TO_ODS] Data rows added.")
+        
+    #     # Define filename and path with owner_id
+    #     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    #     filename = f"portfolio_proportions_{timestamp}.ods"
+    #     output_path = self.get_analysis_path(self.owner_id)  # Pass owner_id
+    #     full_path = os.path.join(output_path, filename)
+        
+    #     # Save the document
+    #     try:
+    #         doc.save(full_path)
+    #         # print(f"[EXPORT_TO_ODS] File saved to: {full_path}")
+    #         return full_path
+    #     except Exception as e:
+    #         # print(f"[EXPORT_TO_ODS ERROR] Failed to export to .ods: {e}")
+    #         raise ValueError(f"Failed to export to .ods: {e}")
 
     def analyze(self) -> Optional[pl.DataFrame]:
         """
@@ -356,7 +423,7 @@ class PortfolioAnalyzer:
 
             # Export results
             if not proportions.is_empty():
-                self.export_to_ods(proportions)
+                self.export_to_csv(proportions)
                 return proportions
             return None
                 
