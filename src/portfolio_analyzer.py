@@ -54,11 +54,9 @@ class PortfolioAnalyzer:
             
             if self.transactions_df is not None:
                 # Convert date strings to Polars Date type
-                self.transactions_df = self.transactions_df.with_columns(date=pl.lit(self.start_date)) # pl.col('date').str.strptime(pl.Date, format='%Y-%m-%d')
+                self.transactions_df = self.transactions_df
                 # Filter transactions after start date
-                start_date_pl = pl.lit(self.start_date) # .str.strptime(pl.Date, format='%Y-%m-%d')
-                self.transactions_df = self.transactions_df.filter(pl.col('date') >= start_date_pl)
-                print(f"Date range: {self.transactions_df['date'].min()} to {self.transactions_df['date'].max()}")
+                print(f"Date range for database transactions: {self.transactions_df['date'].min()} to {self.transactions_df['date'].max()}")
                 print(f"Number of transactions: {len(self.transactions_df)}")
         
         if self.assets_df is None or self.transactions_df is None:
@@ -78,40 +76,29 @@ class PortfolioAnalyzer:
             raise ValueError("Must fetch portfolio data before market data")
             
         # Use StockDataFetcher instead of direct yfinance calls
-        prices_df = self.data_fetcher.fetch_monthly_prices(
+        self.price_data = self.data_fetcher.fetch_prices_from_yahoo(
             self.owner_id, 
             self.start_date
         )
         
-        if prices_df.is_empty():
-            raise ValueError("No valid price data fetched")
-            
-        # Convert the price data to the format we need
-        self.price_data = prices_df.pivot(
-            index='date',
-            columns='asset_id',
-            values='price'
-        )
-        
         # Rename columns to asset names
-        asset_id_to_name = self.assets_df.set_index('asset_id')['name'].to_dict()
-        self.price_data.columns = [asset_id_to_name.get(col, col) for col in self.price_data.columns]
+        # self.price_data.columns = [asset_id_to_name.get(col, col) for col in self.price_data.columns]
 
     def calculate_monthly_positions(self) -> Tuple[List[pl.Datetime], pl.DataFrame]:
         """Calculate monthly positions considering transaction timing."""
         if self.transactions_df is None:
             raise ValueError("Must fetch both transaction and market data first")
-
+        print("self.transactions_df", self.transactions_df.select('date', 'name', 'quantity', 'price_eur'))
         # Merge transactions with asset data
         merged_df = self.transactions_df.join(
             self.assets_df.select(['asset_id', 'name', 'yahoo_ticker']),
             on='asset_id',
             how='left'
         )
+        print("merged_df", merged_df)
         # print("merged_df columns", merged_df.columns)
         # print("merged_df", merged_df.select('date', 'name', 'quantity', 'price_eur', 'yahoo_ticker'))
-        # Sort transactions by date
-        merged_df = merged_df.sort('date')
+        print("merged_df before cumsum", merged_df.select('date', 'name', 'quantity', 'price_eur', 'yahoo_ticker'))
         # print("merged_df sorted", merged_df.select('date', 'name', 'quantity', 'price_eur', 'yahoo_ticker'))
         # print("merged_df pivot", merged_df.pivot("name", index="date", aggregate_function="sum", values="quantity"))
         # merged_df_pivoted = merged_df.pivot("name", index="date", aggregate_function="sum", values="quantity")
@@ -120,10 +107,10 @@ class PortfolioAnalyzer:
             cumulative_quantity=pl.col("quantity")
             .cum_sum()
             .over("name", order_by="date")
-            ).select('date', 'name', 'cumulative_quantity', 'quantity', 'price_eur', 'yahoo_ticker')\
-             .pivot("name", index="date", values="cumulative_quantity")
+            ).select('date', 'name', 'cumulative_quantity', 'quantity', 'price_eur', 'yahoo_ticker')
+            #  .pivot("yahoo_ticker", index="date", values="cumulative_quantity", aggregate_function="sum")
         
-        print("merged_df cumsum", merged_df_cumsum)
+        print("merged_df cumsum from calculate_monthly_positions", merged_df_cumsum)
         # Group by month end and get last dates
         # print("\n[CALCULATE_MONTHLY_POSITIONS] Price data:" )
         # print(self.price_data)
@@ -138,12 +125,14 @@ class PortfolioAnalyzer:
         return merged_df_cumsum
         # return valid_dates, positions_df
 
-    def calculate_portfolio_proportions(self, positions: pl.DataFrame) -> pl.DataFrame:
+    def calculate_portfolio_proportions(self, merged_df_cumsum: pl.DataFrame) -> pl.DataFrame:
         """
         Calculate portfolio proportions over time.
         """
         # Get the latest EUR prices from transactions for assets missing in price_data
-        missing_assets = set(positions.columns) - set(self.price_data.columns)
+        print("merged_df_cumsum", merged_df_cumsum)
+        print("self.price_data", self.price_data)
+        missing_assets = set(merged_df_cumsum.columns) - set(self.price_data.columns)
         if missing_assets:
             print(f"Assets missing Yahoo data: {missing_assets}")
             print("Using EUR prices from transactions for these assets...")
@@ -362,8 +351,8 @@ class PortfolioAnalyzer:
                 raise e
 
             # Calculate positions and proportions
-            monthly_dates, positions = self.calculate_monthly_positions()
-            proportions = self.calculate_portfolio_proportions(positions)
+            merged_df_cumsum = self.calculate_monthly_positions()
+            proportions = self.calculate_portfolio_proportions(merged_df_cumsum)
 
             # Export results
             if not proportions.is_empty():
