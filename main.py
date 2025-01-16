@@ -127,9 +127,9 @@ def main(start_date: str = "2023-01-01", ma_periods: List[int] = [20, 50, 200]) 
         else:
             print(f"[main] Portfolio analysis failed for owner {owner_id}")
         
-        # Create moving average plots
-        print(f"\n[main] === Creating Moving Average Plots for owner {owner_id} ===")
-        create_moving_average_plots(owner_id, start_date, ma_periods)
+        # # Create moving average plots
+        # print(f"\n[main] === Creating Moving Average Plots for owner {owner_id} ===")
+        # create_moving_average_plots(owner_id, start_date, ma_periods)
             
         # except Exception as e:
         #     print(f"[main] Error processing owner {owner_id}: {str(e)}")

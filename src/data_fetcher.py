@@ -45,7 +45,7 @@ class StockDataFetcher:
         Fetch end-of-month prices for all assets and convert to EUR if needed.
         """
         print(f"Starting price fetch for owner {owner_id}")
-        
+        missing_assets = []
         # Get active assets with their currency information
         assets = self.db.get_active_assets(owner_id)
         if assets is None or assets.height == 0:
@@ -53,22 +53,32 @@ class StockDataFetcher:
             return pl.DataFrame()
 
         print(f"Found {len(assets)} active assets for owner {owner_id}:")
-
+        print("assets", assets)
         all_prices = []
         for asset in assets.iter_rows(named=True):
             ticker = asset['yahoo_ticker']
             fx_ticker = asset['yahoo_fx_ticker']
             try:
                 end_date = datetime.now().strftime('%Y-%m-%d')  # Set end date to today
+                date_reference_from_eurusd = yf.download('EURUSD=X', start=start_date, end=end_date)
+                date_reference_from_eurusd['date'] = date_reference_from_eurusd.index
+                date_reference = pl.from_pandas(date_reference_from_eurusd).select(pl.col('date').cast(pl.Date))
                 price_data = yf.download(ticker, start=start_date, end=end_date)
                 price_data['date'] = price_data.index
                 price_data = pl.from_pandas(price_data).select('Close', pl.col('date').cast(pl.Date)).rename({"Close": ticker})
-            except Exception as e:
-                raise e
-
-            if price_data.is_empty():
+                price_data = date_reference.join(price_data, on='date', how='left').fill_null(strategy="forward").fill_null(0)
+                if price_data.shape[0] == 0:
+                    missing_assets.append(ticker)
+                    continue
+                else:
+                    if (price_data.select(ticker).null_count().item(0, ticker) / len(price_data)) > 0.80:
+                        print(f"{ticker} set missing due to high null count, which is {price_data.select(ticker).null_count().item(0, ticker) / len(price_data)}")
+                        missing_assets.append(ticker)
+                        continue
+            except YFInvalidPeriodError as e:
+                print(f"YFInvalidPeriodError for {ticker}: {e}")
+                missing_assets.append(ticker)
                 continue
-            
             # Convert to EUR if needed
             if fx_ticker:
                 if fx_ticker == "EUREUR=X":
@@ -88,7 +98,7 @@ class StockDataFetcher:
                     price_data_with_fx = price_data_with_fx.with_columns((pl.col(ticker) / pl.col(fx_ticker)).alias(ticker))
                     price_data_with_fx = pl.concat([price_data_with_fx])
                     all_prices.append(price_data_with_fx)
-        yahoo_tickers = pl.Series(assets.select('yahoo_ticker')).to_list()
+        yahoo_tickers = set(pl.Series(assets.select('yahoo_ticker')).to_list()) - set(missing_assets)
         all_prices_combined = pl.concat(all_prices, how="align").select('date', pl.col(yahoo_tickers)).drop_nulls()
 
         print(f" Completed yahoo finance data fetch for owner {owner_id}. Total records combined: {len(all_prices_combined)}")
