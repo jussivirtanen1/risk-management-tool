@@ -32,7 +32,6 @@ class PortfolioAnalyzer:
         self.assets_df = None
         self.transactions_df = None
         self.price_data = None
-        # self.missing_assets = []
         self.name_ticker_map = {}  # Mapping from asset name to Yahoo ticker
         self.db = PostgresConnector()
         self.data_fetcher = StockDataFetcher(self.db)
@@ -65,10 +64,6 @@ class PortfolioAnalyzer:
         # Create a mapping from asset name to Yahoo ticker
         self.name_ticker_map = self.assets_df.select('name', 'yahoo_ticker').to_dict()
 
-        # print(f"Asset Name to Ticker Mapping:")
-        # for name, ticker in self.name_ticker_map.items():
-        #     print(f"  {name}: {ticker}")
-
     def fetch_market_data(self) -> None:
         """Fetch market data from Yahoo Finance with currency conversion."""
         print("Starting market data fetch...")
@@ -80,9 +75,6 @@ class PortfolioAnalyzer:
             self.owner_id, 
             self.start_date
         )
-        
-        # Rename columns to asset names
-        # self.price_data.columns = [asset_id_to_name.get(col, col) for col in self.price_data.columns]
 
     def calculate_monthly_positions(self) -> Tuple[List[pl.Datetime], pl.DataFrame]:
         """Calculate monthly positions considering transaction timing."""
@@ -95,14 +87,6 @@ class PortfolioAnalyzer:
             on='asset_id',
             how='inner'
         )
-        # print("merged_df", merged_df)
-        # print("merged_df columns", merged_df.columns)
-        # print("merged_df", merged_df.select('date', 'name', 'quantity', 'price_eur', 'yahoo_ticker'))
-        # print("merged_df before cumsum", merged_df.select('date', 'name', 'quantity', 'price_eur', 'yahoo_ticker'))
-        # print("merged_df sorted", merged_df.select('date', 'name', 'quantity', 'price_eur', 'yahoo_ticker'))
-        # print("merged_df pivot", merged_df.pivot("name", index="date", aggregate_function="sum", values="quantity"))
-        # merged_df_pivoted = merged_df.pivot("name", index="date", aggregate_function="sum", values="quantity")
-        # merged_df_pivoted.columns.remove('date')
         merged_df_cumsum = merged_df.with_columns(
             cumulative_quantity=pl.col("quantity")
             .cum_sum()
