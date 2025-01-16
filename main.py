@@ -109,7 +109,7 @@ def main(start_date: str = "2023-01-01", ma_periods: List[int] = [20, 50, 200]) 
     """
     Main function to run portfolio analysis and create plots for multiple owners.
     """
-    owner_ids = [10]
+    owner_ids = [10, 20, 30]
     
     for owner_id in owner_ids:
         print(f"\n[main] === Processing Owner ID: {owner_id} ===")

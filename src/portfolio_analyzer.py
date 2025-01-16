@@ -351,7 +351,7 @@ def main(start_date: str = "2023-01-01") -> dict:
     Returns:
         dict: Dictionary of owner_id: analysis_results pairs
     """
-    owner_ids = [10]
+    owner_ids = [10, 20, 30]
     results = {}
     
     for owner_id in owner_ids:

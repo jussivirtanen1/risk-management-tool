@@ -3,7 +3,7 @@ import pandas as pd
 import polars as pl
 from typing import Optional, Dict
 from datetime import datetime
-
+from yfinance.exceptions import YFInvalidPeriodError
 class StockDataFetcher:
     def __init__(self, db_connector):
         self.db = db_connector
