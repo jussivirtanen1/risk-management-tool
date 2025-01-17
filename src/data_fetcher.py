@@ -66,7 +66,6 @@ class StockDataFetcher:
                 price_data = yf.download(ticker, start=start_date, end=end_date)
                 price_data['date'] = price_data.index
                 price_data = pl.from_pandas(price_data).select('Close', pl.col('date').cast(pl.Date)).rename({"Close": ticker})
-                price_data = date_reference.join(price_data, on='date', how='left').fill_null(strategy="forward").fill_null(0)
                 if price_data.shape[0] == 0:
                     missing_assets.append(ticker)
                     continue
@@ -75,6 +74,7 @@ class StockDataFetcher:
                         print(f"{ticker} set missing due to high null count, which is {price_data.select(ticker).null_count().item(0, ticker) / len(price_data)}")
                         missing_assets.append(ticker)
                         continue
+                price_data = date_reference.join(price_data, on='date', how='left').fill_null(strategy="forward").fill_null(0)
             except YFInvalidPeriodError as e:
                 print(f"YFInvalidPeriodError for {ticker}: {e}")
                 missing_assets.append(ticker)
