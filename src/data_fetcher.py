@@ -3,7 +3,6 @@ import pandas as pd
 import polars as pl
 from typing import Optional, Dict
 from datetime import datetime
-from yfinance.exceptions import YFInvalidPeriodError
 class StockDataFetcher:
     def __init__(self, db_connector):
         self.db = db_connector
@@ -58,27 +57,23 @@ class StockDataFetcher:
         for asset in assets.iter_rows(named=True):
             ticker = asset['yahoo_ticker']
             fx_ticker = asset['yahoo_fx_ticker']
-            try:
-                end_date = datetime.now().strftime('%Y-%m-%d')  # Set end date to today
-                date_reference_from_eurusd = yf.download('EURUSD=X', start=start_date, end=end_date)
-                date_reference_from_eurusd['date'] = date_reference_from_eurusd.index
-                date_reference = pl.from_pandas(date_reference_from_eurusd).select(pl.col('date').cast(pl.Date))
-                price_data = yf.download(ticker, start=start_date, end=end_date)
-                price_data['date'] = price_data.index
-                price_data = pl.from_pandas(price_data).select('Close', pl.col('date').cast(pl.Date)).rename({"Close": ticker})
-                if price_data.shape[0] == 0:
-                    missing_assets.append(ticker)
-                    continue
-                else:
-                    if (price_data.select(ticker).null_count().item(0, ticker) / len(price_data)) > 0.80:
-                        print(f"{ticker} set missing due to high null count, which is {price_data.select(ticker).null_count().item(0, ticker) / len(price_data)}")
-                        missing_assets.append(ticker)
-                        continue
-                price_data = date_reference.join(price_data, on='date', how='left').fill_null(strategy="forward").fill_null(0)
-            except YFInvalidPeriodError as e:
-                print(f"YFInvalidPeriodError for {ticker}: {e}")
+
+            end_date = datetime.now().strftime('%Y-%m-%d')  # Set end date to today
+            date_reference_from_eurusd = yf.download('EURUSD=X', start=start_date, end=end_date)
+            date_reference_from_eurusd['date'] = date_reference_from_eurusd.index
+            date_reference = pl.from_pandas(date_reference_from_eurusd).select(pl.col('date').cast(pl.Date))
+            price_data = yf.download(ticker, start=start_date, end=end_date)
+            price_data['date'] = price_data.index
+            price_data = pl.from_pandas(price_data).select('Close', pl.col('date').cast(pl.Date)).rename({"Close": ticker})
+            if price_data.shape[0] == 0:
                 missing_assets.append(ticker)
                 continue
+            else:
+                if (price_data.select(ticker).null_count().item(0, ticker) / len(price_data)) > 0.80:
+                    print(f"{ticker} set missing due to high null count, which is {price_data.select(ticker).null_count().item(0, ticker) / len(price_data)}")
+                    missing_assets.append(ticker)
+                    continue
+            price_data = date_reference.join(price_data, on='date', how='left').fill_null(strategy="forward").fill_null(0)
             # Convert to EUR if needed
             if fx_ticker:
                 if fx_ticker == "EUREUR=X":
