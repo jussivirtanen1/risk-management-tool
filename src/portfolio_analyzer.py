@@ -11,9 +11,6 @@ from datetime import datetime, date
 from pathlib import Path
 import os
 from typing import List, Tuple, Optional
-from odf.text import P
-from odf.opendocument import OpenDocumentSpreadsheet
-from odf.table import Table, TableRow, TableCell
 from src.db_connector import PostgresConnector
 from src.data_fetcher import StockDataFetcher
 pl.Config.set_tbl_rows(1000)
