@@ -131,61 +131,44 @@ def price_data():
         'date': [datetime(2023, 2, 1), datetime(2023, 2, 2), datetime(2023, 2, 3)]
     })
 
+def test_calculate_monthly_positions(analyzer, asset_info, asset_owner, asset_transactions, asset_ids):
+    """Test to print out the sample data fixtures."""
+    print("\nAsset Info DataFrame:")
+    print(asset_info)
+    
+    print("\nAsset Owner DataFrame:")  
+    print(asset_owner)
+
+    print("\nAsset Transactions DataFrame:")
+    print(sample_transactions)
+
+    print("\nAsset IDs DataFrame:")
+    print(asset_ids)
+
+    assert 1 == 2
 
 
-@pytest.fixture
-def sample_price_data():
-    """Create sample price data."""
-    dates = pl.date_range(
-        start=datetime(2023, 2, 1),
-        end=datetime(2023, 2, 3),
-        interval="1d"
-    )
-    return pl.DataFrame({
-        'Stock A': [150.0, 155.0, 160.0],
-        'Stock B': [200.0, 205.0, 210.0],
-        'date': dates
-    })
-
-@patch('src.portfolio_analyzer.PostgresConnector')
-def test_fetch_portfolio_data(mock_db, analyzer, sample_assets, sample_transactions):
-    """Test fetching portfolio data from database."""
-    # Setup mock database connector
-    mock_instance = MagicMock()
-    mock_instance.get_active_assets.return_value = sample_assets
-    mock_instance.get_portfolio_transactions.return_value = sample_transactions
-    mock_db.return_value.__enter__.return_value = mock_instance
+# def test_calculate_monthly_positions(analyzer, sample_transactions, sample_assets):
+#     """Test calculation of monthly positions."""
+#     # Setup test data
+#     analyzer.assets_df = sample_assets
+#     analyzer.transactions_df = sample_transactions.with_columns(
+#         pl.col('date').str.strptime(pl.Date, format='%Y-%m-%d')
+#     )
     
-    # Execute test
-    analyzer.fetch_portfolio_data()
+#     analyzer.price_data = pl.DataFrame({
+#         'Stock A': [150.0, 155.0, 160.0],
+#         'Stock B': [200.0, 205.0, 210.0]
+#     }).with_columns(date=pl.date_range(start=datetime(2023, 2, 1), end=datetime(2023, 2, 3), interval="1d"))
     
-    # # Verify results
-    # assert analyzer.assets_df is not None
-    # assert analyzer.transactions_df is not None
-    # assert len(analyzer.assets_df) == 2
-    # assert len(analyzer.transactions_df) == 2
-
-def test_calculate_monthly_positions(analyzer, sample_transactions, sample_assets):
-    """Test calculation of monthly positions."""
-    # Setup test data
-    analyzer.assets_df = sample_assets
-    analyzer.transactions_df = sample_transactions.with_columns(
-        pl.col('date').str.strptime(pl.Date, format='%Y-%m-%d')
-    )
+#     # Execute test
+#     positions = analyzer.calculate_monthly_positions()
     
-    analyzer.price_data = pl.DataFrame({
-        'Stock A': [150.0, 155.0, 160.0],
-        'Stock B': [200.0, 205.0, 210.0]
-    }).with_columns(date=pl.date_range(start=datetime(2023, 2, 1), end=datetime(2023, 2, 3), interval="1d"))
-    
-    # Execute test
-    positions = analyzer.calculate_monthly_positions()
-    
-    # Verify results
-    assert positions is not None
-    assert isinstance(positions, pl.DataFrame)
-    assert len(positions) > 0, "Positions DataFrame should not be empty"
-    assert all(col in positions.columns for col in ['Stock A', 'Stock B']), "All stock columns should be present"
+#     # Verify results
+#     assert positions is not None
+#     assert isinstance(positions, pl.DataFrame)
+#     assert len(positions) > 0, "Positions DataFrame should not be empty"
+#     assert all(col in positions.columns for col in ['Stock A', 'Stock B']), "All stock columns should be present"
     
     # # Get the last day of February 2023
     # feb_end = pl.lit("2023-02-28").str.strptime(pl.Date, format='%Y-%m-%d')
@@ -197,6 +180,27 @@ def test_calculate_monthly_positions(analyzer, sample_transactions, sample_asset
     #     first_date = positions['Date'][0]
     #     assert positions.filter(pl.col('Date') == first_date)['Stock A'][0] == 100
     #     assert positions.filter(pl.col('Date') == first_date)['Stock B'][0] == 50
+
+
+# @patch('src.portfolio_analyzer.PostgresConnector')
+# def test_fetch_portfolio_data(mock_db, analyzer, sample_assets, sample_transactions):
+#     """Test fetching portfolio data from database."""
+#     # Setup mock database connector
+#     mock_instance = MagicMock()
+#     mock_instance.get_active_assets.return_value = sample_assets
+#     mock_instance.get_portfolio_transactions.return_value = sample_transactions
+#     mock_db.return_value.__enter__.return_value = mock_instance
+    
+#     # Execute test
+#     analyzer.fetch_portfolio_data()
+    
+#     # # Verify results
+#     # assert analyzer.assets_df is not None
+#     # assert analyzer.transactions_df is not None
+#     # assert len(analyzer.assets_df) == 2
+#     # assert len(analyzer.transactions_df) == 2
+
+
 
 def test_calculate_portfolio_proportions(analyzer):
     """Test calculation of portfolio proportions."""
