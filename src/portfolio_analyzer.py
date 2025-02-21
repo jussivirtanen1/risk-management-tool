@@ -4,7 +4,6 @@ Portfolio Analysis Module
 Analyzes portfolio composition over time using transaction data and market prices.
 """
 
-import pandas as pd
 import polars as pl
 import yfinance as yf
 from datetime import datetime, date
