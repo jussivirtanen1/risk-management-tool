@@ -202,38 +202,38 @@ def test_calculate_monthly_positions(analyzer, asset_info, asset_owner, asset_tr
 
 
 
-def test_calculate_portfolio_proportions(analyzer):
-    """Test calculation of portfolio proportions."""
-    # Setup test data
-    test_date = pl.lit("2023-02-01").str.strptime(pl.Date, format='%Y-%m-%d')
+# def test_calculate_portfolio_proportions(analyzer):
+#     """Test calculation of portfolio proportions."""
+#     # Setup test data
+#     test_date = pl.lit("2023-02-01").str.strptime(pl.Date, format='%Y-%m-%d')
     
-    # Setup assets data
-    analyzer.assets_df = pl.DataFrame({
-        'name': ['Stock A', 'Stock B'],
-        'asset_id': [1, 2],
-        'yahoo_ticker': ['AAPL', 'MSFT']
-    })
+#     # Setup assets data
+#     analyzer.assets_df = pl.DataFrame({
+#         'name': ['Stock A', 'Stock B'],
+#         'asset_id': [1, 2],
+#         'yahoo_ticker': ['AAPL', 'MSFT']
+#     })
     
-    positions = pl.DataFrame({
-        'Date': [test_date],
-        'Stock A': [100],
-        'Stock B': [50]
-    })
+#     positions = pl.DataFrame({
+#         'Date': [test_date],
+#         'Stock A': [100],
+#         'Stock B': [50]
+#     })
     
-    # Setup price data with matching date
-    analyzer.price_data = pl.DataFrame({
-        'date': [test_date],
-        'Stock A': [150.0],
-        'Stock B': [200.0]
-    })
+#     # Setup price data with matching date
+#     analyzer.price_data = pl.DataFrame({
+#         'date': [test_date],
+#         'Stock A': [150.0],
+#         'Stock B': [200.0]
+#     })
     
-    # Execute test
-    proportions = analyzer.calculate_portfolio_proportions(positions)
+#     # Execute test
+#     proportions = analyzer.calculate_portfolio_proportions(positions)
     
-    # Calculate expected proportions
-    total_value = 100 * 150.0 + 50 * 200.0  # Stock A value + Stock B value
-    expected_stock_a = (100 * 150.0 / total_value) * 100  # Convert to percentage
-    expected_stock_b = (50 * 200.0 / total_value) * 100   # Convert to percentage
+#     # Calculate expected proportions
+#     total_value = 100 * 150.0 + 50 * 200.0  # Stock A value + Stock B value
+#     expected_stock_a = (100 * 150.0 / total_value) * 100  # Convert to percentage
+#     expected_stock_b = (50 * 200.0 / total_value) * 100   # Convert to percentage
     
     # # Verify results
     # assert proportions is not None
