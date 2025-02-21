@@ -24,7 +24,7 @@ class StockDataFetcher:
             return self._fx_rates_cache[cache_key]
 
         try:
-            fx_data = pl.from_pandas(yf.download(fx_ticker, start=date, end=date))
+            fx_data = pl.from_pandas(yf.download(fx_ticker, start=date, end=date, multi_level_index=False))
             if fx_data.is_empty():
                 raise ValueError(f"No FX data found for {fx_ticker} on {date}")
             
@@ -57,12 +57,11 @@ class StockDataFetcher:
         for asset in assets.iter_rows(named=True):
             ticker = asset['yahoo_ticker']
             fx_ticker = asset['yahoo_fx_ticker']
-
             end_date = datetime.now().strftime('%Y-%m-%d')  # Set end date to today
-            date_reference_from_eurusd = yf.download('EURUSD=X', start=start_date, end=end_date)
+            date_reference_from_eurusd = yf.download('EURUSD=X', start=start_date, end=end_date, multi_level_index=False)
             date_reference_from_eurusd['date'] = date_reference_from_eurusd.index
             date_reference = pl.from_pandas(date_reference_from_eurusd).select(pl.col('date').cast(pl.Date))
-            price_data = yf.download(ticker, start=start_date, end=end_date)
+            price_data = yf.download(ticker, start=start_date, end=end_date, multi_level_index=False)
             price_data['date'] = price_data.index
             price_data = pl.from_pandas(price_data).select('Close', pl.col('date').cast(pl.Date)).rename({"Close": ticker})
             if price_data.shape[0] == 0:
@@ -82,7 +81,7 @@ class StockDataFetcher:
                 else:
                     # print("fx_ticker", fx_ticker)
                     end_date = datetime.now().strftime('%Y-%m-%d')  # Set end date to today
-                    fx_price_data = yf.download(fx_ticker, start=start_date, end=end_date, period='1d')
+                    fx_price_data = yf.download(fx_ticker, start=start_date, end=end_date, period='1d', multi_level_index=False)
                     # ticker_info = yf.Ticker(ticker)
                     # print("ticker_info", ticker_info.info)
                     fx_price_data['date'] = fx_price_data.index
