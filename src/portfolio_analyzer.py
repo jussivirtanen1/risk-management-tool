@@ -15,7 +15,7 @@ from src.data_fetcher import StockDataFetcher
 pl.Config.set_tbl_rows(1000)
 
 class PortfolioAnalyzer:
-    def __init__(self, owner_id: int, start_date: str = "2023-01-01"):
+    def __init__(self, owner_id: int, start_date: str = "2025-01-01"):
         """
         Initialize Portfolio Analyzer.
         
@@ -231,7 +231,7 @@ class PortfolioAnalyzer:
         except Exception as e:
             raise ValueError(f"Error during portfolio analysis: {e}")
 
-def main(start_date: str = "2023-01-01") -> dict:
+def main(start_date: str = "2025-01-01") -> dict:
     """
     Main function to run portfolio analysis for multiple owners.
     

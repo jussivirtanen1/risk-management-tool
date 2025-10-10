@@ -105,7 +105,7 @@ def create_moving_average_plots(owner_id: int, start_date: str, ma_periods: List
         else:
             print(f"Failed to create plot for {name}")
 
-def main(start_date: str = "2023-01-01", ma_periods: List[int] = [20, 50, 200]) -> None:
+def main(start_date: str = "2025-01-01", ma_periods: List[int] = [20, 50, 200]) -> None:
     """
     Main function to run portfolio analysis and create plots for multiple owners.
     """
