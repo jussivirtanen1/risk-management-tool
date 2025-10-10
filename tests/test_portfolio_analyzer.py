@@ -131,21 +131,21 @@ def price_data():
         'date': [datetime(2023, 2, 1), datetime(2023, 2, 2), datetime(2023, 2, 3)]
     })
 
-def test_calculate_monthly_positions(analyzer, asset_info, asset_owner, asset_transactions, asset_ids):
-    """Test to print out the sample data fixtures."""
-    print("\nAsset Info DataFrame:")
-    print(asset_info)
+# def test_calculate_monthly_positions(analyzer, asset_info, asset_owner, asset_transactions, asset_ids):
+#     """Test to print out the sample data fixtures."""
+#     print("\nAsset Info DataFrame:")
+#     print(asset_info)
     
-    print("\nAsset Owner DataFrame:")  
-    print(asset_owner)
+#     print("\nAsset Owner DataFrame:")  
+#     print(asset_owner)
 
-    print("\nAsset Transactions DataFrame:")
-    print(sample_transactions)
+#     print("\nAsset Transactions DataFrame:")
+#     print(sample_transactions)
 
-    print("\nAsset IDs DataFrame:")
-    print(asset_ids)
+#     print("\nAsset IDs DataFrame:")
+#     print(asset_ids)
 
-    assert 1 == 2
+#     assert 1 == 2
 
 
 # def test_calculate_monthly_positions(analyzer, sample_transactions, sample_assets):
