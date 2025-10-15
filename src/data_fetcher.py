@@ -1,8 +1,8 @@
 import yfinance as yf
 import pandas as pd
+import polars as pl
 from typing import Optional, Dict
 from datetime import datetime
-
 class StockDataFetcher:
     def __init__(self, db_connector):
         self.db = db_connector
@@ -24,8 +24,8 @@ class StockDataFetcher:
             return self._fx_rates_cache[cache_key]
 
         try:
-            fx_data = yf.download(fx_ticker, start=date, end=date)
-            if fx_data.empty:
+            fx_data = pl.from_pandas(yf.download(fx_ticker, start=date, end=date, multi_level_index=False))
+            if fx_data.is_empty():
                 raise ValueError(f"No FX data found for {fx_ticker} on {date}")
             
             rate = fx_data['Close'].iloc[0]
@@ -39,90 +39,61 @@ class StockDataFetcher:
             print(f"Error fetching FX rate for {fx_ticker} on {date}: {e}")
             return None
 
-    def fetch_monthly_prices(self, owner_id: int, start_date: str) -> pd.DataFrame:
+    def fetch_prices_from_yahoo(self, owner_id: int, start_date: str) -> pl.DataFrame:
         """
         Fetch end-of-month prices for all assets and convert to EUR if needed.
         """
-        print(f"[fetch_monthly_prices] Starting price fetch for owner {owner_id}")
-        
+        print(f"Starting price fetch for owner {owner_id}")
+        missing_assets = []
         # Get active assets with their currency information
         assets = self.db.get_active_assets(owner_id)
-        if assets is None or assets.empty:
-            print(f"[fetch_monthly_prices] No active assets found for owner {owner_id}")
-            return pd.DataFrame()
+        if assets is None or assets.height == 0:
+            print(f" No active assets found for owner {owner_id}")
+            return pl.DataFrame()
 
-        print(f"[fetch_monthly_prices] Found {len(assets)} active assets for owner {owner_id}:")
-        # for _, asset in assets.iterrows():
-        #     print(f"[fetch_monthly_prices]   - {asset['name']} ({asset['yahoo_ticker']}) - Quantity: {asset['total_quantity']}")
-
+        print(f"Found {len(assets)} active assets for owner {owner_id}:")
+        print("assets", assets)
         all_prices = []
-        
-        for _, asset in assets.iterrows():
+        for asset in assets.iter_rows(named=True):
             ticker = asset['yahoo_ticker']
-            fx_ticker = asset.get('yahoo_fx_ticker')  # Use get() in case column doesn't exist
-            
-            try:
-                # Fetch price data
-                print(f"\n[fetch_monthly_prices] Fetching data for {asset['name']} ({ticker})")
-                try:
-                    print(f"[fetch_monthly_prices] Attempting to fetch from {start_date}")
-                    end_date = pd.Timestamp.today().strftime('%Y-%m-%d')  # Set end date to today
-                    price_data = yf.download(ticker, start=start_date, end=end_date)
-                    print(f"[fetch_monthly_prices] Received data shape: {price_data.shape}")
-                except Exception as e:
-                    if "YFInvalidPeriodError" in str(e):
-                        print(f"[fetch_monthly_prices] YFInvalidPeriodError for {ticker}, trying with more recent date")
-                        recent_start = pd.Timestamp.now() - pd.DateOffset(months=6)
-                        recent_start_str = recent_start.strftime('%Y-%m-%d')
-                        print(f"[fetch_monthly_prices] Retrying from {recent_start_str}")
-                        price_data = yf.download(ticker, start=recent_start_str, end=end_date)
-                        print(f"[fetch_monthly_prices] Received data shape after retry: {price_data.shape}")
-                    else:
-                        print(f"[fetch_monthly_prices] Unexpected error for {ticker}: {str(e)}")
-                        raise e
-
-                if price_data.empty:
-                    print(f"[fetch_monthly_prices] No data found for {ticker}")
-                    continue
-
-                # print(f"\n[fetch_monthly_prices] Price data for {asset['name']} ({ticker}):")
-                # print(price_data.tail())
-
-                # Resample to end of month
-                # print(f"[fetch_monthly_prices] Resampling data to monthly for {ticker}")
-                monthly_data = price_data['Close'].resample('ME').last()
-                print(f"[fetch_monthly_prices] Got {len(monthly_data)} monthly data points")
-                
-                # Convert to EUR if needed
-                if fx_ticker:
-                    print(f"\n[fetch_monthly_prices] Converting {ticker} prices from {fx_ticker} to EUR")
-                    for date, price in monthly_data.items():
-                        print(f"[fetch_monthly_prices] Getting FX rate for {date.strftime('%Y-%m-%d')}")
-                        fx_rate = self._get_fx_rate(fx_ticker, date.strftime('%Y-%m-%d'))
-                        if fx_rate is not None:
-                            monthly_data[date] = price * fx_rate
-                            print(f"[fetch_monthly_prices]   {date.strftime('%Y-%m-%d')}: {price:.2f} -> {monthly_data[date]:.2f} EUR (rate: {fx_rate:.4f})")
-                        else:
-                            print(f"[fetch_monthly_prices] Failed to get FX rate for {date.strftime('%Y-%m-%d')}")
-                
-                # Create price records
-                # print(f"[fetch_monthly_prices] Creating price records for {ticker}")
-                records_added = 0
-                for date, price in monthly_data.items():
-                    all_prices.append({
-                        'asset_id': asset['asset_id'],
-                        'date': date,
-                        'price': price,
-                        'currency': 'EUR'
-                    })
-                    records_added += 1
-                # print(f"[fetch_monthly_prices] Added {records_added} price records for {ticker}")
-                    
-            except Exception as e:
-                print(f"[fetch_monthly_prices] Error processing {ticker}: {str(e)}")
-                print(f"[fetch_monthly_prices] Full error details: {repr(e)}")
+            fx_ticker = asset['yahoo_fx_ticker']
+            end_date = datetime.now().strftime('%Y-%m-%d')  # Set end date to today
+            date_reference_from_eurusd = yf.download('EURUSD=X', start=start_date, end=end_date, multi_level_index=False)
+            date_reference_from_eurusd['date'] = date_reference_from_eurusd.index
+            date_reference = pl.from_pandas(date_reference_from_eurusd).select(pl.col('date').cast(pl.Date))
+            price_data = yf.download(ticker, start=start_date, end=end_date, multi_level_index=False)
+            price_data['date'] = price_data.index
+            price_data = pl.from_pandas(price_data).select('Close', pl.col('date').cast(pl.Date)).rename({"Close": ticker})
+            if price_data.shape[0] == 0:
+                missing_assets.append(ticker)
                 continue
+            else:
+                if (price_data.select(ticker).null_count().item(0, ticker) / len(price_data)) > 0.80:
+                    print(f"{ticker} set missing due to high null count, which is {price_data.select(ticker).null_count().item(0, ticker) / len(price_data)}")
+                    missing_assets.append(ticker)
+                    continue
+            price_data = date_reference.join(price_data, on='date', how='left').fill_null(strategy="forward").fill_null(0)
+            # Convert to EUR if needed
+            if fx_ticker:
+                if fx_ticker == "EUREUR=X":
+                    price_data_with_fx = price_data.with_columns(pl.lit(1).alias(fx_ticker).cast(pl.Float64))
+                    all_prices.append(price_data_with_fx)
+                else:
+                    # print("fx_ticker", fx_ticker)
+                    end_date = datetime.now().strftime('%Y-%m-%d')  # Set end date to today
+                    fx_price_data = yf.download(fx_ticker, start=start_date, end=end_date, period='1d', multi_level_index=False)
+                    # ticker_info = yf.Ticker(ticker)
+                    # print("ticker_info", ticker_info.info)
+                    fx_price_data['date'] = fx_price_data.index
+                    fx_price_data = pl.from_pandas(fx_price_data)
+                    fx_price_data = fx_price_data.select('Close', pl.col('date').cast(pl.Date)).rename({"Close": fx_ticker})
+                    # print("fx_price_data after yf.download", fx_price_data)
+                    price_data_with_fx = price_data.join(fx_price_data, on='date', how='inner')
+                    price_data_with_fx = price_data_with_fx.with_columns((pl.col(ticker) / pl.col(fx_ticker)).alias(ticker))
+                    price_data_with_fx = pl.concat([price_data_with_fx])
+                    all_prices.append(price_data_with_fx)
+        yahoo_tickers = set(pl.Series(assets.select('yahoo_ticker')).to_list()) - set(missing_assets)
+        all_prices_combined = pl.concat(all_prices, how="align").select('date', pl.col(yahoo_tickers)).drop_nulls()
 
-        result_df = pd.DataFrame(all_prices)
-        print(f"[fetch_monthly_prices] Completed processing for owner {owner_id}. Total records: {len(result_df)}")
-        return result_df
+        print(f" Completed yahoo finance data fetch for owner {owner_id}. Total records combined: {len(all_prices_combined)}")
+        return all_prices_combined
