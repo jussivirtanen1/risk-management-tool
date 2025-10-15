@@ -3,6 +3,7 @@
 import pytest
 from src.db_connector import PostgresConnector
 import pandas as pd
+import polars as pl
 from datetime import date
 from unittest.mock import patch, MagicMock
 import os
@@ -76,7 +77,7 @@ def test_fetch_asset_info(db_connector):
     df = db_connector.fetch_data(query)
     
     assert df is not None
-    assert isinstance(df, pd.DataFrame)
+    assert isinstance(df, pl.DataFrame)
     assert all(col in df.columns for col in [
         'name', 'asset_id', 'currency', 'instrument', 
         'geographical_area', 'industry'
@@ -91,7 +92,7 @@ def test_fetch_asset_ids(db_connector):
     df = db_connector.fetch_data(query)
     
     assert df is not None
-    assert isinstance(df, pd.DataFrame)
+    assert isinstance(df, pl.DataFrame)
     assert all(col in df.columns for col in [
         'name', 'asset_id', 'yahoo_ticker', 
         'yahoo_fx_ticker', 'isin'
@@ -106,7 +107,7 @@ def test_fetch_asset_owner(db_connector):
     df = db_connector.fetch_data(query)
     
     assert df is not None
-    assert isinstance(df, pd.DataFrame)
+    assert isinstance(df, pl.DataFrame)
     assert all(col in df.columns for col in [
         'name', 'asset_id', 'owner_id', 'bank', 'account'
     ])
@@ -120,7 +121,7 @@ def test_fetch_asset_transactions(db_connector):
     df = db_connector.fetch_data(query)
     
     assert df is not None
-    assert isinstance(df, pd.DataFrame)
+    assert isinstance(df, pl.DataFrame)
     assert all(col in df.columns for col in [
         'event_type', 'asset_id', 'owner_id', 'name', 'date',
         'quantity', 'price_fx', 'price_eur', 'amount'
@@ -144,7 +145,7 @@ def test_insert_asset_info(db_connector, test_asset_data):
     """
     df = db_connector.fetch_data(verify_query)
     assert len(df) > 0
-    assert df.iloc[0]['name'] == test_asset_data['name']
+    assert df["name"][0] == test_asset_data['name']
 
 def test_join_asset_tables(db_connector):
     """Test joining multiple asset tables"""
@@ -158,7 +159,7 @@ def test_join_asset_tables(db_connector):
     df = db_connector.fetch_data(query)
     
     assert df is not None
-    assert isinstance(df, pd.DataFrame)
+    assert isinstance(df, pl.DataFrame)
     assert all(col in df.columns for col in [
         'name', 'asset_id', 'currency', 'owner_id', 'bank'
     ])
@@ -176,7 +177,7 @@ def test_transaction_summary(db_connector):
     df = db_connector.fetch_data(query)
     
     assert df is not None
-    assert isinstance(df, pd.DataFrame)
+    assert isinstance(df, pl.DataFrame)
     assert all(col in df.columns for col in [
         'asset_id', 'transaction_count', 'total_amount'
     ])
