@@ -93,7 +93,7 @@ class StockDataFetcher:
                     price_data_with_fx = pl.concat([price_data_with_fx])
                     all_prices.append(price_data_with_fx)
         yahoo_tickers = set(pl.Series(assets.select('yahoo_ticker')).to_list()) - set(missing_assets)
-        all_prices_combined = pl.concat(all_prices, how="align").select('date', pl.col(yahoo_tickers)).drop_nulls()
+        all_prices_combined = pl.concat(all_prices, how="align").select('date', pl.col(yahoo_tickers)).fill_null(0)
 
         print(f" Completed yahoo finance data fetch for owner {owner_id}. Total records combined: {len(all_prices_combined)}")
         return all_prices_combined
