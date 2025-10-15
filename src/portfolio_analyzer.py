@@ -207,14 +207,6 @@ class PortfolioAnalyzer:
             # If we have no assets or transactions, return None early
             if self.assets_df.is_empty() or self.transactions_df.is_empty():
                 return None
-            
-            try:
-                self.fetch_market_data()
-                print(self.fetch_market_data(), "self.fetch_market_data()")
-            except ValueError as e:
-                if "No valid tickers found" in str(e):
-                    return None
-                raise e
 
             # Calculate positions and proportions
             merged_df_cumsum = self.calculate_monthly_positions()
