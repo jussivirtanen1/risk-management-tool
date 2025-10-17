@@ -1,7 +1,4 @@
-# src/db_connector.py
-
-import psycopg2
-import pandas as pd
+import psycopg
 import polars as pl
 from typing import Optional, Dict, Any
 import os
@@ -25,19 +22,8 @@ class PostgresConnector:
         self.schema = f"asset_management_{self.db_param}"
         
         # Default configuration from environment variables
-        self.config = {
-            "dbname": os.getenv("DB_NAME", default_db_name),
-            "user": os.getenv("DB_USER"),
-            "password": os.getenv("DB_PASSWORD"),
-            "host": os.getenv("DB_HOST", "localhost"),
-            "port": os.getenv("DB_PORT", "5432")
-        }
-        
-        # Override with any provided kwargs
-        self.config.update(kwargs)
-        
-        self.conn = None
-        self.cur = None
+        self.conn_string = os.getenv("DATABASE_URL")
+
 
     def _check_test_protection(self):
         """Check if we're trying to run tests in production environment."""
@@ -58,7 +44,7 @@ class PostgresConnector:
             # Check for test protection
             self._check_test_protection()
             
-            self.conn = psycopg2.connect(**self.config)
+            self.conn = psycopg.connect(**self.conn_string)
             self.cur = self.conn.cursor()
             
             # Set the schema for this connection
