@@ -58,10 +58,10 @@ class StockDataFetcher:
             ticker = asset['yahoo_ticker']
             fx_ticker = asset['yahoo_fx_ticker']
             end_date = datetime.now().strftime('%Y-%m-%d')  # Set end date to today
-            date_reference_from_eurusd = yf.download('EURUSD=X', start=start_date, end=end_date, multi_level_index=False)
+            date_reference_from_eurusd = yf.download('EURUSD=X', start=start_date, multi_level_index=False, auto_adjust=True)
             date_reference_from_eurusd['date'] = date_reference_from_eurusd.index
             date_reference = pl.from_pandas(date_reference_from_eurusd).select(pl.col('date').cast(pl.Date))
-            price_data = yf.download(ticker, start=start_date, end=end_date, multi_level_index=False)
+            price_data = yf.download(ticker, start=start_date, multi_level_index=False, auto_adjust=True)
             price_data['date'] = price_data.index
             price_data = pl.from_pandas(price_data).select('Close', pl.col('date').cast(pl.Date)).rename({"Close": ticker})
             if price_data.shape[0] == 0:
@@ -80,8 +80,7 @@ class StockDataFetcher:
                     all_prices.append(price_data_with_fx)
                 else:
                     # print("fx_ticker", fx_ticker)
-                    end_date = datetime.now().strftime('%Y-%m-%d')  # Set end date to today
-                    fx_price_data = yf.download(fx_ticker, start=start_date, end=end_date, period='1d', multi_level_index=False)
+                    fx_price_data = yf.download(fx_ticker, start=start_date, period='1d', multi_level_index=False, auto_adjust=True)
                     # ticker_info = yf.Ticker(ticker)
                     # print("ticker_info", ticker_info.info)
                     fx_price_data['date'] = fx_price_data.index
@@ -93,7 +92,7 @@ class StockDataFetcher:
                     price_data_with_fx = pl.concat([price_data_with_fx])
                     all_prices.append(price_data_with_fx)
         yahoo_tickers = set(pl.Series(assets.select('yahoo_ticker')).to_list()) - set(missing_assets)
-        all_prices_combined = pl.concat(all_prices, how="align").select('date', pl.col(yahoo_tickers)).drop_nulls()
+        all_prices_combined = pl.concat(all_prices, how="align").select('date', pl.col(yahoo_tickers)).fill_null(0)
 
         print(f" Completed yahoo finance data fetch for owner {owner_id}. Total records combined: {len(all_prices_combined)}")
         return all_prices_combined
