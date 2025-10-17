@@ -127,26 +127,6 @@ def test_fetch_asset_transactions(db_connector):
         'quantity', 'price_fx', 'price_eur', 'amount'
     ])
 
-def test_insert_asset_info(db_connector, test_asset_data):
-    """Test inserting data into asset_info table"""
-    query = f"""
-    INSERT INTO {db_connector.schema}.asset_info 
-    (name, asset_id, currency, instrument, geographical_area, industry)
-    VALUES (%(name)s, %(asset_id)s, %(currency)s, %(instrument)s, 
-            %(geographical_area)s, %(industry)s)
-    """
-    success = db_connector.execute_query(query, test_asset_data)
-    assert success is True
-
-    # Verify insertion
-    verify_query = f"""
-    SELECT * FROM {db_connector.schema}.asset_info 
-    WHERE asset_id = {test_asset_data['asset_id']}
-    """
-    df = db_connector.fetch_data(verify_query)
-    assert len(df) > 0
-    assert df["name"][0] == test_asset_data['name']
-
 def test_join_asset_tables(db_connector):
     """Test joining multiple asset tables"""
     query = f"""
@@ -181,15 +161,6 @@ def test_transaction_summary(db_connector):
     assert all(col in df.columns for col in [
         'asset_id', 'transaction_count', 'total_amount'
     ])
-
-def test_cleanup(db_connector):
-    """Test cleanup of test data"""
-    cleanup_query = f"""
-    DELETE FROM {db_connector.schema}.asset_info
-    WHERE asset_id = 1001;
-    """
-    success = db_connector.execute_query(cleanup_query)
-    assert success is True
 
 def test_env_file_loading():
     """Test that the correct environment file is loaded for test environment."""

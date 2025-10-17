@@ -83,35 +83,6 @@ class PostgresConnector:
             print(f"Database error: {e}")
             return None
 
-    def execute_query(self, query: str, params: Optional[Dict[str, Any]] = None) -> bool:
-        """
-        Execute a query without returning results (INSERT, UPDATE, DELETE).
-        
-        Args:
-            query (str): SQL query to execute
-            params (dict, optional): Parameters for the SQL query
-            
-        Returns:
-            bool: True if query executed successfully, False otherwise
-        """
-        try:
-            # Check for test protection
-            self._check_test_protection()
-            
-            if not self.conn or not self.cur:
-                if not self.connect():
-                    return False
-            
-            self.cur.execute(query, params)
-            self.conn.commit()
-            return True
-            
-        except Exception as e:
-            print(f"Database error: {e}")
-            if self.conn:
-                self.conn.rollback()
-            return False
-
     def get_asset_info(self, asset_id: Optional[int] = None) -> Optional[pl.DataFrame]:
         """
         Fetch asset information from asset_info table.
