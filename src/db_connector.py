@@ -89,8 +89,6 @@ class PostgresConnector:
             Optional[pl.DataFrame]: Asset information
         """
         query = f"SELECT * FROM {self.schema}.asset_info"
-        if asset_id is not None:
-            query += f" WHERE asset_id = {asset_id}"
         return self.fetch_data(query)
 
     def get_asset_transactions(self, 
@@ -109,18 +107,6 @@ class PostgresConnector:
             Optional[pl.DataFrame]: Transaction data
         """
         query = f"SELECT * FROM {self.schema}.asset_transactions"
-        conditions = []
-        
-        if asset_id is not None:
-            conditions.append(f"asset_id = {asset_id}")
-        if start_date is not None:
-            conditions.append(f"date >= '{start_date}'")
-        if end_date is not None:
-            conditions.append(f"date <= '{end_date}'")
-            
-        if conditions:
-            query += " WHERE " + " AND ".join(conditions)
-            
         return self.fetch_data(query)
 
     def get_asset_owners(self, asset_id: Optional[int] = None) -> Optional[pl.DataFrame]:
@@ -134,8 +120,6 @@ class PostgresConnector:
             Optional[pl.DataFrame]: Asset ownership data
         """
         query = f"SELECT * FROM {self.schema}.asset_owner"
-        if asset_id is not None:
-            query += f" WHERE asset_id = {asset_id}"
         return self.fetch_data(query)
 
     def get_asset_ids(self, asset_id: Optional[int] = None) -> Optional[pl.DataFrame]:
@@ -149,8 +133,6 @@ class PostgresConnector:
             Optional[pl.DataFrame]: Asset identification data
         """
         query = f"SELECT * FROM {self.schema}.asset_ids"
-        if asset_id is not None:
-            query += f" WHERE asset_id = {asset_id}"
         return self.fetch_data(query)
 
     def get_portfolio_assets(self, owner_id: int) -> Optional[pl.DataFrame]:
