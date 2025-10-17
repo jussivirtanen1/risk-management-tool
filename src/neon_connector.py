@@ -4,9 +4,11 @@ import psycopg
 from dotenv import load_dotenv
 import polars as pl
 
+# Load environment variables from .env file
 load_dotenv()
-
+# Get connection string
 conn_string = os.getenv("DATABASE_URL")
+
 
 try:
     with psycopg.connect(conn_string) as conn:
