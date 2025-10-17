@@ -67,13 +67,8 @@ class PostgresConnector:
             Optional[pl.DataFrame]: Query results as DataFrame or None if query fails
         """
         try:
-            # Check for test protection
-            self._check_test_protection()
-            
-            if not self.conn or not self.cur:
-                if not self.connect():
-                    return None
-            
+            # Check for test protection #TODO: check is test protection works correctly
+            self._check_test_protection()            
             self.cur.execute(query, params)
             columns = [desc[0] for desc in self.cur.description]
             data = self.cur.fetchall()
