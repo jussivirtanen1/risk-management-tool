@@ -121,7 +121,7 @@ class PortfolioAnalyzer:
         # Get the latest EUR prices from transactions for assets missing in price_data
 
         missing_assets = set(merged_df_cumsum.columns) - set(self.price_data.columns)
-        if missing_assets is None:
+        if missing_assets == set():
             print("No missing assets")
         else:
             print(f"Assets missing Yahoo data: {missing_assets}")
@@ -210,7 +210,6 @@ class PortfolioAnalyzer:
             
             try:
                 self.fetch_market_data()
-                print(self.fetch_market_data(), "self.fetch_market_data()")
             except ValueError as e:
                 if "No valid tickers found" in str(e):
                     return None
