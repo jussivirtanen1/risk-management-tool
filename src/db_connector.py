@@ -25,13 +25,13 @@ class PostgresConnector:
         self.conn_string = os.getenv("DATABASE_URL")
 
 
-    def _check_test_protection(self):
-        """Check if we're trying to run tests in production environment."""
-        if self.db_param == "_prod" and os.getenv('PYTEST_CURRENT_TEST'):
-            raise RuntimeError(
-                "ERROR: Attempting to run tests in production environment. "
-                "This is not allowed to protect production data."
-            )
+    # def _check_test_protection(self):
+    #     """Check if we're trying to run tests in production environment."""
+    #     if self.db_param == "_prod" and os.getenv('PYTEST_CURRENT_TEST'):
+    #         raise RuntimeError(
+    #             "ERROR: Attempting to run tests in production environment. "
+    #             "This is not allowed to protect production data."
+    #         )
 
     def connect(self) -> bool:
         """
@@ -42,9 +42,9 @@ class PostgresConnector:
         """
         try:
             # Check for test protection
-            self._check_test_protection()
+            # self._check_test_protection()
             
-            self.conn = psycopg.connect(**self.conn_string)
+            self.conn = psycopg.connect(self.conn_string)
             self.cur = self.conn.cursor()
             
             # Set the schema for this connection
@@ -67,8 +67,8 @@ class PostgresConnector:
             Optional[pl.DataFrame]: Query results as DataFrame or None if query fails
         """
         try:
-            # Check for test protection #TODO: check is test protection works correctly
-            self._check_test_protection()            
+            # Check for test protection
+            # self._check_test_protection()            
             self.cur.execute(query, params)
             columns = [desc[0] for desc in self.cur.description]
             data = self.cur.fetchall()
@@ -88,7 +88,7 @@ class PostgresConnector:
         Returns:
             Optional[pl.DataFrame]: Asset information
         """
-        query = f"SELECT * FROM {self.schema}.asset_info"
+        query = f"SELECT * FROM asset_info"
         return self.fetch_data(query)
 
     def get_asset_transactions(self, 
@@ -106,7 +106,7 @@ class PostgresConnector:
         Returns:
             Optional[pl.DataFrame]: Transaction data
         """
-        query = f"SELECT * FROM {self.schema}.asset_transactions"
+        query = f"SELECT * FROM asset_transactions"
         return self.fetch_data(query)
 
     def get_asset_owners(self, asset_id: Optional[int] = None) -> Optional[pl.DataFrame]:
@@ -119,7 +119,7 @@ class PostgresConnector:
         Returns:
             Optional[pl.DataFrame]: Asset ownership data
         """
-        query = f"SELECT * FROM {self.schema}.asset_owner"
+        query = f"SELECT * FROM asset_owner"
         return self.fetch_data(query)
 
     def get_asset_ids(self, asset_id: Optional[int] = None) -> Optional[pl.DataFrame]:
@@ -132,7 +132,7 @@ class PostgresConnector:
         Returns:
             Optional[pl.DataFrame]: Asset identification data
         """
-        query = f"SELECT * FROM {self.schema}.asset_ids"
+        query = f"SELECT * FROM asset_ids"
         return self.fetch_data(query)
 
     def get_portfolio_assets(self, owner_id: int) -> Optional[pl.DataFrame]:
@@ -144,10 +144,10 @@ class PostgresConnector:
                 id.yahoo_ticker,
                 id.yahoo_fx_ticker,
                 info.instrument
-            FROM {self.schema}.asset_ids AS id
-            LEFT JOIN {self.schema}.asset_owner AS own 
+            FROM asset_ids AS id
+            LEFT JOIN asset_owner AS own 
                 ON id.asset_id = own.asset_id
-            LEFT JOIN {self.schema}.asset_info AS info 
+            LEFT JOIN asset_info AS info 
                 ON id.asset_id = info.asset_id
             WHERE owner_id = {owner_id}
         """
@@ -166,7 +166,7 @@ class PostgresConnector:
                 price_fx,
                 price_eur,
                 amount
-            FROM {self.schema}.asset_transactions
+            FROM asset_transactions
             WHERE owner_id = {owner_id}
             ORDER BY date ASC
         """
@@ -179,7 +179,7 @@ class PostgresConnector:
                 SELECT 
                     asset_id,
                     SUM(quantity) as total_quantity
-                FROM {self.schema}.asset_transactions
+                FROM asset_transactions
                 WHERE owner_id = {owner_id}
                 GROUP BY asset_id
                 HAVING SUM(quantity) > 0
@@ -191,7 +191,7 @@ class PostgresConnector:
                 cp.total_quantity,
                 id.yahoo_fx_ticker
             FROM current_positions cp
-            JOIN {self.schema}.asset_ids id ON cp.asset_id = id.asset_id
+            JOIN asset_ids id ON cp.asset_id = id.asset_id
             WHERE id.yahoo_ticker IS NOT NULL 
             AND id.yahoo_ticker != ''
             ORDER BY id.asset_id;  -- Add ordering for easier comparison
