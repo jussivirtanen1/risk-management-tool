@@ -3,9 +3,9 @@ import pandas as pd
 import polars as pl
 from typing import Optional, Dict
 from datetime import datetime
+from src.db_connector import PostgresConnector
 class StockDataFetcher:
-    def __init__(self, db_connector):
-        self.db = db_connector
+    def __init__(self):
         self._fx_rates_cache = {}  # Cache for FX rates
 
     def _get_fx_rate(self, fx_ticker: str, date: str) -> float:
@@ -46,7 +46,8 @@ class StockDataFetcher:
         print(f"Starting price fetch for owner {owner_id}")
         missing_assets = []
         # Get active assets with their currency information
-        assets = self.db.get_active_assets(owner_id)
+        with PostgresConnector() as db:
+            assets = db.get_active_assets(owner_id)
         if assets is None or assets.height == 0:
             print(f" No active assets found for owner {owner_id}")
             return pl.DataFrame()
