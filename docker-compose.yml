@@ -34,13 +34,6 @@ services:
       - .env.${DB_PARAM:-test}
     environment:
       DB_HOST: host.docker.internal
-      # Required inputs
-      DB_PARAM:
-      DB_USER:
-      DB_PASSWORD:
-      # Automatically configured
-      DB_NAME: am_db_${DB_PARAM}
-      DB_SCHEMA: asset_management_${DB_PARAM}
 
 networks:
   app-network:
