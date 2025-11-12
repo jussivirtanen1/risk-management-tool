@@ -10,7 +10,7 @@ from pathlib import Path
 import os
 from typing import List, Optional
 from src.portfolio_analyzer import PortfolioAnalyzer
-from src.plotter import MovingAveragePlotter
+# from src.plotter import MovingAveragePlotter
 from src.db_connector import PostgresConnector
 
 def get_output_path(folder: str = "analysis", owner_id: int = None) -> str:

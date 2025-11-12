@@ -29,8 +29,7 @@ class PortfolioAnalyzer:
         self.transactions_df = None
         self.price_data = None
         self.name_ticker_map = {}  # Mapping from asset name to Yahoo ticker
-        self.db = PostgresConnector()
-        self.data_fetcher = StockDataFetcher(self.db)
+        self.data_fetcher = StockDataFetcher()
 
     @staticmethod
     def get_analysis_path(owner_id: int) -> str:
@@ -46,7 +45,7 @@ class PortfolioAnalyzer:
         with PostgresConnector() as db:
             self.assets_df = db.get_active_assets(self.owner_id)
             self.transactions_df = db.get_portfolio_transactions(self.owner_id)
-            
+            print("Successfully fetched active assets and portfolio transaction from the database")
             if self.transactions_df is not None:
                 # Convert date strings to Polars Date type
                 self.transactions_df = self.transactions_df
